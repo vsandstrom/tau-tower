@@ -57,7 +57,6 @@ async fn send_file(filename: &str) -> Result<Response<BoxBody<Bytes, std::io::Er
         .header("Content-Type", mime_type.as_ref()) // <-- Add MIME type
         .body(boxed_body)
         .unwrap();
-
     Ok(response)
 }
 
