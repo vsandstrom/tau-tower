@@ -26,7 +26,9 @@ pub async fn udp_thread(
   loop {
     while let Ok(size) = socket.recv(&mut buf).await {
       let msg = buf[..size].to_vec();
-      tx.send(msg).unwrap();
+      if let Err(e) = tx.send(msg) {
+        eprintln!("oops, could not send into broadcast object: {e}")
+      }
     }
   }
 }
@@ -43,11 +45,13 @@ pub async fn ws_thread(
     let ws = accept_async(stream).await.unwrap();
     let (mut tx_ws, mut rx_ws) = ws.split();
     let mut rx = tx.subscribe();
-
     let mut send_task = task::spawn(async move {
       while let Ok(buf) = rx.recv().await {
         let msg = Message::binary(buf);
-        let _ = tx_ws.send(msg).await;
+        if tx_ws.send(msg).await.is_err() {
+          break;
+        }
+        // let _ = tx_ws.send(msg).await;
       }
     });
 
@@ -56,11 +60,13 @@ pub async fn ws_thread(
       while let Some(Ok(_msg)) = rx_ws.next().await {}
     });
 
-    tokio::select! {
-      _ = &mut recv_task => send_task.abort(),
-      _ = &mut send_task => recv_task.abort(),
+    task::spawn(async move {
+      tokio::select! {
+        _ = &mut recv_task => send_task.abort(),
+        _ = &mut send_task => recv_task.abort(),
 
-    }
+      }
+    });
   }
 
   Ok(())
