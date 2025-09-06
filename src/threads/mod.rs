@@ -7,12 +7,52 @@ use std::sync::{Arc, Mutex};
 
 use crate::http::handle_request;
 use hyper::body::Bytes;
+use tokio_tungstenite::{accept_async, connect_async};
+use futures_util::StreamExt;
 
 pub const MTU: usize = 1500;
 
 pub struct Headers {
     pub headers: Option<Bytes>,
 }
+
+/// Creates a WebSocket receiver listening to the sender of the ogg opus stream.
+/// Appending the ogg opus blocks to a producer/consumer object.
+pub async fn ws_thread(
+    tx: broadcast::Sender<Bytes>,
+    src_addr: (&str, u16),
+    header: &Arc<Mutex<Headers>>
+) {
+  let url = format!("ws://{}:{}", src_addr.0, src_addr.1);
+  let mut temp_headers: Vec<Bytes> = vec!();
+  let mut headers_received = false;
+  loop {
+    if let Ok((mut ws_stream, _)) = connect_async(&url).await {
+      'message: while let Some(msg) = ws_stream.next().await  {
+        let page = msg.unwrap().into_data();
+        if !headers_received {
+          if temp_headers.len() < 2 { 
+            temp_headers.push(page);
+            continue 'message;
+          }
+          else {
+            if let Ok(mut h) = header.lock() && let None = h.headers {
+              let bytes = prepare_headers(&temp_headers);
+              h.headers = Some(bytes);
+              headers_received = true;
+            }
+            continue 'message;
+          }
+        }
+
+        if let Err(e) = tx.send(page) {
+          eprintln!("oops, could not send into broadcast object: {e}")
+        }
+      }
+    }
+  }
+}
+
 
 /// Creates a Udp receiver listening to the sender of the ogg opus stream.
 /// Appending the ogg opus blocks to a producer/consumer object.

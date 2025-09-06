@@ -9,14 +9,21 @@ use std::sync::{Arc, Mutex};
 use hyper::body::Bytes;
 
 use crate::threads::{
-  http_thread, udp_thread,
+  http_thread, udp_thread, ws_thread,
   Headers
 };
+
+enum ServerMode {
+  WebSocket,
+  Udp
+}
 
 // TODO: Change for sane defaults and config-loaded values
 const UDP: u16 = 8001;
 const PORT: u16 = 8002;
 const END_POINT: &str = "/tau.ogg";
+
+const MODE: ServerMode = ServerMode::WebSocket;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -34,10 +41,21 @@ async fn main() -> anyhow::Result<()> {
   let ip_addr = SocketAddr::new(local_ip, PORT);
   let udp_addr = SocketAddr::new(remote_ip, UDP);
 
-  // receive audio
-  task::spawn(async move {
-    udp_thread(tx_clone, udp_addr, &headers_clone).await.unwrap();
-  });
+  match MODE {
+    ServerMode::Udp => {
+      // receive audio
+      task::spawn(async move {
+        udp_thread(tx_clone, udp_addr, &headers_clone).await.unwrap();
+      });
+
+    },
+    ServerMode::WebSocket => {
+      // receive audio
+      task::spawn(async move {
+        ws_thread(tx_clone, ("127.0.0.1", UDP), &headers_clone).await;
+      });
+    }
+  }
 
   // serve audio stream
   task::spawn(async move {
