@@ -27,7 +27,6 @@ pub async fn handle_request(
 ) -> Result<Response<BoxBody<Bytes, Infallible>>> {
   match (req.method(), req.uri().path()) {
     (&Method::GET, "/tau.ogg") => {
-
       let rx = tx.subscribe();
       let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
         .filter_map(|msg| async move { msg.ok() })
