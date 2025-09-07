@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::http::handle_request;
 use hyper::body::Bytes;
-use tokio_tungstenite::{accept_async, connect_async};
+use tokio_tungstenite::connect_async;
 use futures_util::StreamExt;
 
 pub const MTU: usize = 1500;
@@ -25,28 +25,21 @@ pub async fn ws_thread(
 ) {
   let url = format!("ws://{}:{}", src_addr.0, src_addr.1);
   let mut temp_headers: Vec<Bytes> = vec!();
-  let mut headers_received = false;
+  let mut headers_parsed = false;
   loop {
     if let Ok((mut ws_stream, _)) = connect_async(&url).await {
-      'message: while let Some(msg) = ws_stream.next().await  {
+      while let Some(msg) = ws_stream.next().await  {
         let page = msg.unwrap().into_data();
-        if !headers_received {
-          if temp_headers.len() < 2 { 
-            temp_headers.push(page);
-            continue 'message;
+        if validate_bos_and_tags(&page).is_ok() {
+          temp_headers.push(page);
+        } else {
+          if !headers_parsed && let Ok(mut h) = header.lock() && let None = h.headers {
+            h.headers = Some(prepare_headers(&temp_headers));
+            headers_parsed = true;
           }
-          else {
-            if let Ok(mut h) = header.lock() && let None = h.headers {
-              let bytes = prepare_headers(&temp_headers);
-              h.headers = Some(bytes);
-              headers_received = true;
-            }
-            continue 'message;
+          if let Err(e) = tx.send(page) {
+            eprintln!("oops, could not send into broadcast object: {e}")
           }
-        }
-
-        if let Err(e) = tx.send(page) {
-          eprintln!("oops, could not send into broadcast object: {e}")
         }
       }
     }
@@ -69,27 +62,20 @@ pub async fn udp_thread(
 
   let mut buf = [0u8; MTU];
   let mut temp_headers = vec!();
-  let mut headers_received = false;
+  let mut headers_parsed = false;
   loop {
-    'message: while let Ok(size) = udp_socket.recv(&mut buf).await {
+    while let Ok(size) = udp_socket.recv(&mut buf).await {
       let page = Bytes::copy_from_slice(&buf[..size]);
-      if !headers_received {
-        if temp_headers.len() < 2 { 
-          temp_headers.push(page);
-          continue 'message;
+      if validate_bos_and_tags(&page).is_ok() {
+        temp_headers.push(page);
+      } else {
+        if !headers_parsed && let Ok(mut h) = header.lock() && let None = h.headers {
+          h.headers = Some(prepare_headers(&temp_headers));
+          headers_parsed = true;
         }
-        else {
-          if let Ok(mut h) = header.lock() && let None = h.headers {
-            let bytes = prepare_headers(&temp_headers);
-            h.headers = Some(bytes);
-            headers_received = true;
-          }
-          continue 'message;
+        if let Err(e) = tx.send(page) {
+          eprintln!("oops, could not send into broadcast object: {e}")
         }
-      }
-
-      if let Err(e) = tx.send(page) {
-        eprintln!("oops, could not send into broadcast object: {e}")
       }
     }
   }
@@ -115,7 +101,7 @@ pub async fn http_thread(
       }))
         .await
       {
-        eprintln!("error serving connection: {}", err);
+        // eprintln!("error serving connection: {}", err);
       }
     });
   }
@@ -123,4 +109,24 @@ pub async fn http_thread(
 
 fn prepare_headers(buf: &[Bytes]) -> Bytes {
   Bytes::copy_from_slice(&[&buf[0][..], &buf[1][..]].concat())
+}
+
+fn validate_bos(data: &Bytes) -> bool {
+  if data[5] == 0x2 { return true; }
+  false
+}
+
+fn validate_bos_and_tags<'a>(data: &'a Bytes) -> core::result::Result<&'a Bytes, ()> {
+  let n_segs = data[26] as usize;
+  let offset = 27+n_segs;
+  if data.len() < 27 + 8 { return Err(()) }
+  if matches!(&data[offset..offset+8], b"OpusTags" | b"OpusHead") {
+    return Ok(data);
+  }
+  Err(())
+}
+
+fn validate_eos(data: &Bytes) -> bool {
+  if data[5] == 0x4 {return true; }
+  false
 }
