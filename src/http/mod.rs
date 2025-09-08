@@ -1,8 +1,7 @@
 use futures_util::{StreamExt, Stream};
 use http_body_util::{Full, StreamBody, BodyExt, combinators::{BoxBody}};
 use hyper::{ 
-  Method, Request, Response, Result, StatusCode, 
-  body::{Bytes, Incoming, Frame},
+  body::{Bytes, Frame, Incoming}, Method, Request, Response, Result, StatusCode, Uri
 };
 use tokio::sync::broadcast;
 
@@ -23,10 +22,11 @@ fn four_oh_four() -> Response<BoxBody<Bytes, Infallible>> {
 pub async fn handle_request(
     req: Request<Incoming>,
     tx: broadcast::Sender<Bytes>,
-    ogg_header: Arc<Mutex<crate::Headers>>
+    ogg_header: Arc<Mutex<crate::Headers>>,
+    mount: Arc<str>
 ) -> Result<Response<BoxBody<Bytes, Infallible>>> {
   match (req.method(), req.uri().path()) {
-    (&Method::GET, "/tau.ogg") => {
+    (&Method::GET, path) if path == &*mount => {
       let rx = tx.subscribe();
       let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
         .filter_map(|msg| async move { msg.ok() })
@@ -47,8 +47,8 @@ pub async fn handle_request(
     },
 
     (&Method::GET, "/" | "/index.html") => {
-      let html = b"<html><body><a href=\"/tau.ogg\">Audio Stream</a></body></html>";
-      let body = http_body_util::Full::new(Bytes::from_static(html)).boxed();
+      let html = format!("<html><body><a href=\"/{mount}\">Audio Stream</a></body></html>");
+      let body = http_body_util::Full::new(Bytes::from(html)).boxed();
       Ok(Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "text/html; charset=utf-8")

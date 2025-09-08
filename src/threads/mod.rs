@@ -84,24 +84,27 @@ pub async fn udp_thread(
 pub async fn http_thread(
     ip_addr: impl tokio::net::ToSocketAddrs,
     tx: broadcast::Sender<Bytes>,
-    header: &Arc<Mutex<Headers>>
+    header: &Arc<Mutex<Headers>>,
+    mount: Arc<str>
 ) {
   let listener = TcpListener::bind(ip_addr).await.unwrap();
   let tx_clone = tx.clone();
+  let mount = mount.clone();
   loop {
     let (stream, _) = listener.accept().await.unwrap();
     let _ = stream.set_nodelay(true);
     let io = TokioIo::new(stream);
     let tx_inner_clone = tx_clone.clone();
     let header_clone = header.clone();
+    let mount_clone = mount.clone();
     tokio::task::spawn(async move {
       if let Err(err) = auto::Builder::new(TokioExecutor::new())
         .serve_connection(io, service_fn(move |req| {
-          handle_request(req, tx_inner_clone.clone(), header_clone.clone())
+          handle_request(req, tx_inner_clone.clone(), header_clone.clone(), mount_clone.clone())
       }))
         .await
       {
-        // eprintln!("error serving connection: {}", err);
+        eprintln!("error serving connection: {}", err);
       }
     });
   }
@@ -111,12 +114,7 @@ fn prepare_headers(buf: &[Bytes]) -> Bytes {
   Bytes::copy_from_slice(&[&buf[0][..], &buf[1][..]].concat())
 }
 
-fn validate_bos(data: &Bytes) -> bool {
-  if data[5] == 0x2 { return true; }
-  false
-}
-
-fn validate_bos_and_tags<'a>(data: &'a Bytes) -> core::result::Result<&'a Bytes, ()> {
+fn validate_bos_and_tags(data: & Bytes) -> core::result::Result<&Bytes, ()> {
   let n_segs = data[26] as usize;
   let offset = 27+n_segs;
   if data.len() < 27 + 8 { return Err(()) }
@@ -124,6 +122,11 @@ fn validate_bos_and_tags<'a>(data: &'a Bytes) -> core::result::Result<&'a Bytes,
     return Ok(data);
   }
   Err(())
+}
+
+fn validate_bos(data: &Bytes) -> bool {
+  if data[5] == 0x2 { return true; }
+  false
 }
 
 fn validate_eos(data: &Bytes) -> bool {

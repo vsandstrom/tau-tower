@@ -21,7 +21,7 @@ enum ServerMode {
 // TODO: Change for sane defaults and config-loaded values
 const UDP: u16 = 8001;
 const PORT: u16 = 8002;
-const END_POINT: &str = "/tau.ogg";
+const END_POINT: &str = "tau.ogg";
 
 const MODE: ServerMode = ServerMode::WebSocket;
 
@@ -41,6 +41,11 @@ async fn main() -> anyhow::Result<()> {
   let ip_addr = SocketAddr::new(local_ip, PORT);
   let udp_addr = SocketAddr::new(remote_ip, UDP);
 
+  // TODO: swap to value from config
+  let end_point = format!("/{END_POINT}");
+  let mount: Arc<str> = Arc::from(end_point);
+  let mount_clone = mount.clone();
+
   match MODE {
     ServerMode::Udp => {
       // receive audio
@@ -59,10 +64,10 @@ async fn main() -> anyhow::Result<()> {
 
   // serve audio stream
   task::spawn(async move {
-    http_thread(ip_addr, tx, &headers).await
+    http_thread(ip_addr, tx, &headers, mount_clone).await
   });
 
-  println!("Running on http://{ip_addr}{END_POINT}");
+  println!("Running on http://{ip_addr}{mount}");
 
   futures_util::future::pending::<()>().await;
   Ok(())
