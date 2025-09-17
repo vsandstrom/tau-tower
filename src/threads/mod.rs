@@ -9,6 +9,7 @@ use crate::http::handle_request;
 use hyper::body::Bytes;
 use tokio_tungstenite::connect_async;
 use futures_util::StreamExt;
+use std::net::SocketAddr;
 
 pub const MTU: usize = 1500;
 
@@ -20,12 +21,13 @@ pub struct Headers {
 /// Appending the ogg opus blocks to a producer/consumer object.
 pub async fn ws_thread(
     tx: broadcast::Sender<Bytes>,
-    src_addr: (&str, u16),
-    header: &Arc<Mutex<Headers>>
+    src_addr: SocketAddr,
+    header: Arc<Mutex<Headers>>
 ) {
-  let url = format!("ws://{}:{}", src_addr.0, src_addr.1);
+  let url = format!("ws://{}:{}", src_addr.ip() , src_addr.port());
   let mut temp_headers: Vec<Bytes> = vec!();
   let mut headers_parsed = false;
+  let mut open_endpoint = true;
   loop {
     if let Ok((mut ws_stream, _)) = connect_async(&url).await {
       while let Some(msg) = ws_stream.next().await  {
@@ -37,8 +39,14 @@ pub async fn ws_thread(
             h.headers = Some(prepare_headers(&temp_headers));
             headers_parsed = true;
           }
-          if let Err(e) = tx.send(page) {
-            eprintln!("oops, could not send into broadcast object: {e}")
+          match tx.send(page) {
+            Ok(_) => { open_endpoint = true; },
+            Err(e) => { 
+              if open_endpoint {
+                open_endpoint = false;
+                eprintln!("could not open client stream: {e}"); 
+              }
+            }
           }
         }
       }
@@ -52,7 +60,7 @@ pub async fn ws_thread(
 pub async fn udp_thread(
     tx: broadcast::Sender<Bytes>,
     udp_addr: impl tokio::net::ToSocketAddrs,
-    header: &Arc<Mutex<Headers>>
+    header: Arc<Mutex<Headers>>
 ) -> Result<()> {
   use tokio::net::UdpSocket;
   let udp_socket = match UdpSocket::bind(udp_addr).await {
@@ -63,6 +71,7 @@ pub async fn udp_thread(
   let mut buf = [0u8; MTU];
   let mut temp_headers = vec!();
   let mut headers_parsed = false;
+  let mut open_endpoint = true;
   loop {
     while let Ok(size) = udp_socket.recv(&mut buf).await {
       let page = Bytes::copy_from_slice(&buf[..size]);
@@ -73,8 +82,14 @@ pub async fn udp_thread(
           h.headers = Some(prepare_headers(&temp_headers));
           headers_parsed = true;
         }
-        if let Err(e) = tx.send(page) {
-          eprintln!("oops, could not send into broadcast object: {e}")
+        match tx.send(page) {
+          Ok(_) => { open_endpoint = true; },
+          Err(e) => { 
+            if open_endpoint {
+              open_endpoint = false;
+              eprintln!("could not open client stream: {e}"); 
+            }
+          }
         }
       }
     }
@@ -122,14 +137,4 @@ fn validate_bos_and_tags(data: & Bytes) -> core::result::Result<&Bytes, ()> {
     return Ok(data);
   }
   Err(())
-}
-
-fn validate_bos(data: &Bytes) -> bool {
-  if data[5] == 0x2 { return true; }
-  false
-}
-
-fn validate_eos(data: &Bytes) -> bool {
-  if data[5] == 0x4 {return true; }
-  false
 }

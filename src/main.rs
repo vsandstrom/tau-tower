@@ -38,8 +38,8 @@ async fn main() -> anyhow::Result<()> {
   let tx_clone = tx.clone();
   // let tx_clone2 = tx.clone();
 
-  let ip_addr = SocketAddr::new(local_ip, PORT);
-  let udp_addr = SocketAddr::new(remote_ip, UDP);
+  let local_addr = SocketAddr::new(local_ip, PORT);
+  let remote_addr = SocketAddr::new(remote_ip, UDP);
 
   // TODO: swap to value from config
   let end_point = format!("/{END_POINT}");
@@ -50,24 +50,24 @@ async fn main() -> anyhow::Result<()> {
     ServerMode::Udp => {
       // receive audio
       task::spawn(async move {
-        udp_thread(tx_clone, udp_addr, &headers_clone).await.unwrap();
+        udp_thread(tx_clone, remote_addr, headers_clone).await.unwrap();
       });
 
     },
     ServerMode::WebSocket => {
       // receive audio
       task::spawn(async move {
-        ws_thread(tx_clone, ("127.0.0.1", UDP), &headers_clone).await;
+        ws_thread(tx_clone, remote_addr, headers_clone).await;
       });
     }
   }
 
   // serve audio stream
   task::spawn(async move {
-    http_thread(ip_addr, tx, &headers, mount_clone).await
+    http_thread(local_addr, tx, &headers, mount_clone).await
   });
 
-  println!("Running on http://{ip_addr}{mount}");
+  println!("Running on http://{}:{}{mount}", local_addr.ip(), local_addr.port());
 
   futures_util::future::pending::<()>().await;
   Ok(())
