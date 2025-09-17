@@ -57,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
     ServerMode::WebSocket => {
       // receive audio
       task::spawn(async move {
-        ws_thread(tx_clone, remote_addr, headers_clone).await;
+        ws_thread(tx_clone, remote_addr, local_addr, headers_clone).await;
       });
     }
   }

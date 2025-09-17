@@ -1,4 +1,4 @@
-use hyper::Result;
+use hyper::{Request, Result, Uri};
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use tokio::{net::TcpListener, sync::broadcast};
@@ -10,6 +10,8 @@ use hyper::body::Bytes;
 use tokio_tungstenite::connect_async;
 use futures_util::StreamExt;
 use std::net::SocketAddr;
+use tokio_tungstenite::tungstenite::ClientRequestBuilder;
+use tokio_tungstenite::tungstenite::http::uri;
 
 pub const MTU: usize = 1500;
 
@@ -22,16 +24,32 @@ pub struct Headers {
 pub async fn ws_thread(
     tx: broadcast::Sender<Bytes>,
     src_addr: SocketAddr,
+    host_addr: SocketAddr,
     header: Arc<Mutex<Headers>>
 ) {
   let url = format!("ws://{}:{}", src_addr.ip() , src_addr.port());
+  let uri = Uri::builder()
+    .scheme("ws")
+    .authority(format!("{}:{}", src_addr.ip(), src_addr.port()))
+    .path_and_query("/")
+    .build()
+    .unwrap();
+  // let uri = Uri::from_static(&url);
   let mut temp_headers: Vec<Bytes> = vec!();
   let mut headers_parsed = false;
   let mut open_endpoint = true;
   loop {
-    if let Ok((mut ws_stream, _)) = connect_async(&url).await {
-      while let Some(msg) = ws_stream.next().await  {
-        let page = msg.unwrap().into_data();
+    let request = ClientRequestBuilder::new(uri.clone())
+      .with_header("port", host_addr.port().to_string());
+    if let Ok((mut ws_stream, _)) = connect_async(request).await {
+      'connections: while let Some(msg) = ws_stream.next().await  {
+        let page = match msg {
+          Ok(m) => m.into_data(),
+          Err(e) => {
+            eprintln!("Unrecognized message: {e}");
+            break 'connections;
+          }
+        };
         if validate_bos_and_tags(&page).is_ok() {
           temp_headers.push(page);
         } else {
