@@ -1,5 +1,5 @@
 #![deny(unused_crate_dependencies)]
-mod http;
+mod server;
 mod threads;
 
 use std::net::{Ipv4Addr, SocketAddr};
@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use hyper::body::Bytes;
 
 use crate::threads::{
-  http_thread, udp_thread, ws_thread,
+  http, udp, ws,
   Headers
 };
 
@@ -50,21 +50,21 @@ async fn main() -> anyhow::Result<()> {
     ServerMode::Udp => {
       // receive audio
       task::spawn(async move {
-        udp_thread(tx_clone, remote_addr, headers_clone).await.unwrap();
+        udp::thread(tx_clone, remote_addr, headers_clone).await.unwrap();
       });
 
     },
     ServerMode::WebSocket => {
       // receive audio
       task::spawn(async move {
-        ws_thread(tx_clone, remote_addr, local_addr, headers_clone).await;
+        ws::thread(tx_clone, remote_addr, local_addr, headers_clone).await;
       });
     }
   }
 
   // serve audio stream
   task::spawn(async move {
-    http_thread(local_addr, tx, &headers, mount_clone).await
+    http::thread(local_addr, tx, &headers, mount_clone).await
   });
 
   println!("Running on http://{}:{}{mount}", local_addr.ip(), local_addr.port());
