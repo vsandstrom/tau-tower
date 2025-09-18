@@ -9,7 +9,8 @@ pub struct Config {
     pub username: String,
     pub password: String,
     pub url: String,
-    pub port: u16,
+    pub listen_port: u16,
+    pub mount_port: u16,
     pub mount: String,
 }
 
@@ -52,8 +53,11 @@ impl Config {
     if let Some(pw) = &args.password {
       self.password = pw.to_string();
     }
-    if let Some(p) = args.port {
-      self.port = p;
+    if let Some(p) = args.listen_port {
+      self.listen_port = p;
+    }
+    if let Some(p) = args.mount_port {
+      self.mount_port = p;
     }
     if let Some(m) = &args.mount {
       self.mount = m.to_string();
@@ -80,7 +84,7 @@ impl Config {
         "No config found at '{}'. Let's create one: ",
         path.display()
       );
-      println!("Credentials must correspond to what is set in icecast.xml");
+      println!("Credentials must correspond to the source stream config");
       let username: String = Input::new()
         .with_prompt("Username")
         .interact_text()
@@ -92,21 +96,28 @@ impl Config {
         .map_err(|e| TauConfigError::Input(e.to_string()))?;
 
       let url: String = Input::new()
-        .with_prompt("Icecast URL")
+        .with_prompt("Public IP for server")
         .default("127.0.0.1".to_string())
         .interact_text()
         .map_err(|e| TauConfigError::Input(e.to_string()))
         .and_then(crate::args::validate_ip)?;
 
-      let port: u16 = Input::new()
-        .with_prompt("Port")
+      let listen_port: u16 = Input::new()
+        .with_prompt("Source port")
         .default(8000)
+        .interact_text()
+        .map_err(|e| TauConfigError::Input(e.to_string()))
+        .and_then(validate_port)?;
+      
+      let mount_port: u16 = Input::new()
+        .with_prompt("Broadcast port")
+        .default(8001)
         .interact_text()
         .map_err(|e| TauConfigError::Input(e.to_string()))
         .and_then(validate_port)?;
 
       let mount = Input::new()
-        .with_prompt("Icecast mount point")
+        .with_prompt("Mount endpoint")
         .default("tau.ogg".into())
         .interact_text()
         .map_err(|e| TauConfigError::Input(e.to_string()))?;
@@ -115,7 +126,8 @@ impl Config {
         username,
         password,
         url,
-        port,
+        listen_port,
+        mount_port,
         mount,
       };
 

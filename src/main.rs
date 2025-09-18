@@ -18,6 +18,7 @@ use crate::threads::{
 };
 use crate::config::Config;
 use crate::args::Args;
+use std::str::FromStr;
 
 enum ServerMode {
   WebSocket,
@@ -31,7 +32,7 @@ struct Credentials {
 }
 
 // TODO: Change for sane defaults and config-loaded values
-const UDP: u16 = 8001;
+// const UDP: u16 = 8888;
 const PORT: u16 = 8002;
 const END_POINT: &str = "tau.ogg";
 
@@ -46,18 +47,16 @@ async fn main() -> anyhow::Result<()> {
   let creds = Credentials{
     username: config.username.clone(), 
     password: config.password.clone(),
-    broadcast_port: config.port
+    broadcast_port: config.mount_port
   };
-  let local_ip = std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-  let remote_ip = std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
   let headers = Arc::new(Mutex::new(Headers{headers: None})); 
-
   // used to send ogg opus blocks between Udp thread to WebSocket thread
   let (tx, _) = broadcast::channel::<Bytes>(128);
 
-  let local_addr = SocketAddr::new(local_ip, PORT);
-  let remote_addr = SocketAddr::new(remote_ip, UDP);
+  let ip = Ipv4Addr::from_str(&config.url).unwrap();
+  let server_addr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.mount_port);
+  let listen_addr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.listen_port);
 
   // TODO: swap to value from config
   let end_point = format!("/{END_POINT}");
@@ -70,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
       let headers_clone = headers.clone();
       // receive audio
       task::spawn(async move {
-        udp::thread(tx_clone, remote_addr, headers_clone).await.unwrap();
+        udp::thread(tx_clone, listen_addr, headers_clone).await.unwrap();
       });
 
     },
@@ -79,17 +78,17 @@ async fn main() -> anyhow::Result<()> {
       let headers_clone = headers.clone();
       // receive audio
       task::spawn(async move {
-        ws::thread(tx_clone, remote_addr, creds, headers_clone).await;
+        ws::thread(tx_clone, listen_addr, creds, headers_clone).await;
       });
     }
   }
 
   // serve audio stream
   task::spawn(async move {
-    http::thread(local_addr, tx, &headers, mount_clone).await
+    http::thread(server_addr, tx, &headers, mount_clone).await
   });
 
-  println!("Running on http://{}:{}{}", local_addr.ip(), local_addr.port(), mount);
+  println!("Serving stream on http://{}:{}{}", ip, config.mount_port, mount);
 
   futures_util::future::pending::<()>().await;
   Ok(())
