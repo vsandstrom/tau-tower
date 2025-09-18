@@ -1,4 +1,3 @@
-#![deny(unused_crate_dependencies)]
 mod server;
 mod threads;
 mod config;
@@ -12,7 +11,9 @@ use hyper::body::Bytes;
 use clap::Parser;
 
 use crate::threads::{
-  http, udp, ws,
+  http,
+  udp,
+  ws,
   Headers
 };
 use crate::config::Config;
@@ -35,6 +36,8 @@ const PORT: u16 = 8002;
 const END_POINT: &str = "tau.ogg";
 
 const MODE: ServerMode = ServerMode::WebSocket;
+
+
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
