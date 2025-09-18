@@ -10,6 +10,7 @@ use tokio_tungstenite::tungstenite::ClientRequestBuilder;
 use std::time::Duration;
 
 use super::{prepare_headers, Headers, validate_bos_and_tags};
+use crate::Credentials;
 
 pub const MTU: usize = 1500;
 const TIMEOUT: Duration = Duration::from_millis(50);
@@ -19,10 +20,10 @@ const TIMEOUT: Duration = Duration::from_millis(50);
 pub async fn thread(
     tx: broadcast::Sender<Bytes>,
     src_addr: SocketAddr,
-    host_addr: SocketAddr,
+    credentials: Credentials,
     header: Arc<Mutex<Headers>>
 ) {
-  let url = format!("ws://{}:{}", src_addr.ip() , src_addr.port());
+  // let url = format!("ws://{}:{}", src_addr.ip() , src_addr.port());
   let uri = Uri::builder()
     .scheme("ws")
     .authority(format!("{}:{}", src_addr.ip(), src_addr.port()))
@@ -35,7 +36,9 @@ pub async fn thread(
   let mut open_endpoint = true;
   loop {
     let request = ClientRequestBuilder::new(uri.clone())
-      .with_header("port", host_addr.port().to_string());
+      .with_header("port", credentials.broadcast_port.to_string())
+      .with_header("password", credentials.password.clone())
+      .with_header("username", credentials.username.clone());
     match connect_async(request).await {
       Ok((mut ws_stream, _)) => {
         'connections: while let Some(msg) = ws_stream.next().await  {
