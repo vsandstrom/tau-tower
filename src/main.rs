@@ -2,43 +2,24 @@ mod server;
 mod threads;
 mod config;
 mod args;
+mod util;
 
 use std::net::{Ipv4Addr, SocketAddr};
 use tokio::sync::broadcast;
 use tokio::task;
 use std::sync::{Arc, Mutex};
+use std::str::FromStr;
 use hyper::body::Bytes;
 use clap::Parser;
 
-use crate::threads::{
-  http,
-  udp,
-  ws,
-  Headers
-};
+use crate::threads::{http, udp, ws};
+use crate::util::{Headers, Credentials};
 use crate::config::Config;
 use crate::args::Args;
-use std::str::FromStr;
 
-enum ServerMode {
-  WebSocket,
-  Udp
-}
-
-struct Credentials {
-  pub username: String,
-  pub password: String,
-  pub broadcast_port: u16
-}
-
-// TODO: Change for sane defaults and config-loaded values
-// const UDP: u16 = 8888;
-const PORT: u16 = 8002;
 const END_POINT: &str = "tau.ogg";
 
-const MODE: ServerMode = ServerMode::WebSocket;
-
-
+// const MODE: ServerMode = ServerMode::WebSocket;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -63,25 +44,12 @@ async fn main() -> anyhow::Result<()> {
   let mount: Arc<str> = Arc::from(end_point);
   let mount_clone = mount.clone();
 
-  match MODE {
-    ServerMode::Udp => {
-      let tx_clone = tx.clone();
-      let headers_clone = headers.clone();
-      // receive audio
-      task::spawn(async move {
-        udp::thread(tx_clone, listen_addr, headers_clone).await.unwrap();
-      });
-
-    },
-    ServerMode::WebSocket => {
-      let tx_clone = tx.clone();
-      let headers_clone = headers.clone();
-      // receive audio
-      task::spawn(async move {
-        ws::thread(tx_clone, listen_addr, creds, headers_clone).await;
-      });
-    }
-  }
+  let tx_clone = tx.clone();
+  let headers_clone = headers.clone();
+  // receive audio
+  task::spawn(async move {
+    ws::thread(tx_clone, listen_addr, creds, headers_clone).await;
+  });
 
   // serve audio stream
   task::spawn(async move {

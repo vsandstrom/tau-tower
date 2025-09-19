@@ -4,10 +4,11 @@ use hyper_util::rt::TokioIo;
 use tokio::{net::TcpListener, sync::broadcast};
 use hyper::server::conn::http1;
 use std::sync::{Arc, Mutex};
-use crate::server::handle_request;
 use hyper::body::Bytes;
+use crate::server::handle_request;
+use crate::util::Headers;
 
-use super::{TIMEOUT, Headers};
+use super::TIMEOUT;
 
 pub async fn thread(
     ip_addr: impl tokio::net::ToSocketAddrs + std::fmt::Debug,
