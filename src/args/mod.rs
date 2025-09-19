@@ -20,10 +20,16 @@ pub(crate) struct Args {
     pub password: Option<String>,
 
     /// Stream port
-    #[arg(short, long, value_parser=|p: &str| {
+    #[arg(short='l', long, value_parser=|p: &str| {
       validate_port(parse_port(p).unwrap())
     })]
-    pub port: Option<u16>,
+    pub listen_port: Option<u16>,
+    
+    /// Stream port
+    #[arg(short='p', long, value_parser=|p: &str| {
+      validate_port(parse_port(p).unwrap())
+    })]
+    pub mount_port: Option<u16>,
 
     #[arg(short, long)]
     pub mount: Option<String>,

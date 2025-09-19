@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use hyper::body::Bytes;
 
-use super::{prepare_headers, validate_bos_and_tags, Headers, MTU};
+use crate::util::{validate_bos_and_tags, Headers};
+use super::MTU;
 
 /// Creates a Udp receiver listening to the sender of the ogg opus stream.
 /// Appending the ogg opus blocks to a producer/consumer object.
@@ -29,7 +30,7 @@ pub async fn thread(
         temp_headers.push(page);
       } else {
         if !headers_parsed && let Ok(mut h) = header.lock() && let None = h.headers {
-          h.headers = Some(prepare_headers(&temp_headers));
+          h.prepare_headers(&temp_headers);
           headers_parsed = true;
         }
         match tx.send(page) {

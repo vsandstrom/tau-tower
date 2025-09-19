@@ -4,18 +4,26 @@ use hyper_util::rt::TokioIo;
 use tokio::{net::TcpListener, sync::broadcast};
 use hyper::server::conn::http1;
 use std::sync::{Arc, Mutex};
-use crate::server::handle_request;
 use hyper::body::Bytes;
+use crate::server::handle_request;
+use crate::util::Headers;
 
-use super::{TIMEOUT, Headers};
+use super::TIMEOUT;
 
 pub async fn thread(
-    ip_addr: impl tokio::net::ToSocketAddrs,
+    ip_addr: impl tokio::net::ToSocketAddrs + std::fmt::Debug,
     tx: broadcast::Sender<Bytes>,
     header: &Arc<Mutex<Headers>>,
     mount: Arc<str>
 ) {
-  let listener = TcpListener::bind(ip_addr).await.unwrap();
+  let listener = match TcpListener::bind(&ip_addr).await {
+    Ok(tl) => tl,
+    Err(e) => {
+      eprintln!("Could not create TcpListener: {e}");
+      eprintln!("{:#?}", ip_addr);
+      return;
+    }
+  };
   let tx_clone = tx.clone();
   let mount = mount.clone();
 
