@@ -1,5 +1,4 @@
-use futures_util::{StreamExt, Stream};
-use http_body_util::{Full, StreamBody, BodyExt, combinators::{BoxBody}};
+use futures_util::{StreamExt, Stream}; use http_body_util::{Full, StreamBody, BodyExt, combinators::{BoxBody}};
 use hyper::{ 
   body::{Bytes, Frame, Incoming}, Method, Request, Response, Result, StatusCode
 };
@@ -7,17 +6,7 @@ use tokio::sync::broadcast;
 
 use std::sync::{Arc, Mutex};
 use std::convert::Infallible;
-
-fn four_oh_four() -> Response<BoxBody<Bytes, Infallible>> {
-  Response::builder()
-    .status(StatusCode::NOT_FOUND)
-    .body(
-      Full::new("NOT_FOUND".into())
-        .map_err(|e| match e {})
-        .boxed(),
-    )
-  .unwrap()
-}
+type HttpResponse = Response<BoxBody<Bytes, Infallible>>;
 
 pub async fn handle_request(
     req: Request<Incoming>,
@@ -35,27 +24,14 @@ pub async fn handle_request(
 
       let stream = ogg_header_stream(ogg_header).chain(stream);
       let body: BoxBody<Bytes, Infallible> = BodyExt::boxed(StreamBody::new(stream));
-
-      Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "audio/ogg; codecs=\"opus\"")
-        .header("Transfer-Encoding", "chunked")
-        .header("Cache-Control", "no-cache")
-        .header("Connection", "keep-alive")
-        .body(body)
-        .unwrap())
+      Ok(stream_response(body))
     },
 
     (&Method::GET, "/" | "/index.html") => {
       let html = format!("<html><body><a href=\"/{mount}\">Audio Stream</a></body></html>");
       let body = http_body_util::Full::new(Bytes::from(html)).boxed();
-      Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", "text/html; charset=utf-8")
-        .body(body)
-        .unwrap())
+      Ok(default_response(body))
     },
-
     _ => {
       Ok(four_oh_four())
     }
@@ -70,4 +46,34 @@ fn ogg_header_stream(header: Arc<Mutex<crate::Headers>>) -> impl Stream<Item = c
       .and_then(|h| h.headers.clone()).into_iter()
       .map(|b| Ok(Frame::data(b)))
   )
+}
+
+fn stream_response(body: BoxBody<Bytes, Infallible>) -> HttpResponse {
+  Response::builder()
+  .status(StatusCode::OK)
+  .header("Content-Type", "audio/ogg; codecs=\"opus\"")
+  .header("Transfer-Encoding", "chunked")
+  .header("Cache-Control", "no-cache")
+  .header("Connection", "keep-alive")
+  .body(body)
+  .unwrap()
+}
+
+fn default_response(body: BoxBody<Bytes, Infallible>) -> HttpResponse {
+  Response::builder()
+  .status(StatusCode::OK)
+  .header("Content-Type", "text/html; charset=utf-8")
+  .body(body)
+  .unwrap()
+}
+
+fn four_oh_four() -> HttpResponse {
+  Response::builder()
+    .status(StatusCode::NOT_FOUND)
+    .body(
+      Full::new("NOT_FOUND".into())
+        .map_err(|e| match e {})
+        .boxed(),
+    )
+  .unwrap()
 }
