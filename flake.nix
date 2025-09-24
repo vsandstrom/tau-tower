@@ -21,10 +21,10 @@
         pkg-config
         perl
         rustPlatform.bindgenHook
+        openssl
       ];
 
       doCheck = false;
     };
   });
-
 }

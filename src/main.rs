@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::str::FromStr;
 use hyper::body::Bytes;
 use clap::Parser;
+use inline_colorization::*;
 
 use crate::threads::{http, udp, ws};
 use crate::util::{Headers, Credentials};
@@ -56,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
     http::thread(server_addr, tx, &headers, mount_clone).await
   });
 
-  println!("Serving stream on http://{}:{}{}", ip, config.mount_port, mount);
+  println!("{color_bright_yellow}Broadcasting on:{color_reset}\t{color_cyan}http://{}:{}{}{color_cyan}", ip, config.mount_port, mount);
 
   futures_util::future::pending::<()>().await;
   Ok(())
