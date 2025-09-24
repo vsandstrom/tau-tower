@@ -8,7 +8,7 @@ use is_ip::is_ip;
 
 #[derive(Parser)]
 #[command(name = "tau-tower")]
-#[command(version = "0.2.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command( about = "Webradio server, distributes audio stream from a tau-radio client")]
 pub(crate) struct Args {
     /// Webradio username
