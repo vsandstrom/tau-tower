@@ -678,6 +678,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "inline_colorization"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc1804bdb6a9784758b200007273a8b84e2b0b0b97a8f1e18e763eceb3e9f98a"
+
+[[package]]
 name = "io-uring"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1292,6 +1298,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "inline_colorization",
  "is-ip",
  "openssl",
  "serde",
