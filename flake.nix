@@ -11,14 +11,15 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-        cranelib = crane.mkLib pkgs;
+        craneLib = crane.mkLib pkgs;
       in
     {
     packages.default = craneLib.buildPackage {
       src = craneLib.cleanCargoSource ./.;
 
-      nativeBuildInput = with pkgs; [
+      nativeBuildInputs = with pkgs; [
         pkg-config
+        perl
         rustPlatform.bindgenHook
       ];
 

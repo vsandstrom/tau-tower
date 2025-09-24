@@ -1,3 +1,4 @@
 /target
-.DS_Store
 tower.toml
+.DS_Store
+result
