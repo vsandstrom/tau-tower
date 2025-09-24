@@ -1,73 +1,62 @@
-#![deny(unused_crate_dependencies)]
-mod http;
+mod server;
 mod threads;
+mod config;
+mod args;
+mod util;
 
 use std::net::{Ipv4Addr, SocketAddr};
 use tokio::sync::broadcast;
 use tokio::task;
 use std::sync::{Arc, Mutex};
+use std::str::FromStr;
 use hyper::body::Bytes;
+use clap::Parser;
 
-use crate::threads::{
-  http_thread, udp_thread, ws_thread,
-  Headers
-};
+use crate::threads::{http, udp, ws};
+use crate::util::{Headers, Credentials};
+use crate::config::Config;
+use crate::args::Args;
 
-enum ServerMode {
-  WebSocket,
-  Udp
-}
-
-// TODO: Change for sane defaults and config-loaded values
-const UDP: u16 = 8001;
-const PORT: u16 = 8002;
 const END_POINT: &str = "tau.ogg";
 
-const MODE: ServerMode = ServerMode::WebSocket;
+// const MODE: ServerMode = ServerMode::WebSocket;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-  let local_ip = std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-  let remote_ip = std::net::IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+  let args = Args::parse();
+  let config = Config::load_or_create(args.reset_config).map(|c| c.merge_cli_args(&args))?;
+  let creds = Credentials{
+    username: config.username.clone(), 
+    password: config.password.clone(),
+    broadcast_port: config.mount_port
+  };
 
   let headers = Arc::new(Mutex::new(Headers{headers: None})); 
-  let headers_clone = headers.clone();
-
   // used to send ogg opus blocks between Udp thread to WebSocket thread
   let (tx, _) = broadcast::channel::<Bytes>(128);
-  let tx_clone = tx.clone();
-  // let tx_clone2 = tx.clone();
 
-  let ip_addr = SocketAddr::new(local_ip, PORT);
-  let udp_addr = SocketAddr::new(remote_ip, UDP);
+  let ip = Ipv4Addr::from_str(&config.url).unwrap();
+  let server_addr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.mount_port);
+  let listen_addr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.listen_port);
 
   // TODO: swap to value from config
   let end_point = format!("/{END_POINT}");
   let mount: Arc<str> = Arc::from(end_point);
   let mount_clone = mount.clone();
 
-  match MODE {
-    ServerMode::Udp => {
-      // receive audio
-      task::spawn(async move {
-        udp_thread(tx_clone, udp_addr, &headers_clone).await.unwrap();
-      });
-
-    },
-    ServerMode::WebSocket => {
-      // receive audio
-      task::spawn(async move {
-        ws_thread(tx_clone, ("127.0.0.1", UDP), &headers_clone).await;
-      });
-    }
-  }
+  let tx_clone = tx.clone();
+  let headers_clone = headers.clone();
+  // receive audio
+  task::spawn(async move {
+    ws::thread(tx_clone, listen_addr, creds, headers_clone).await;
+  });
 
   // serve audio stream
   task::spawn(async move {
-    http_thread(ip_addr, tx, &headers, mount_clone).await
+    http::thread(server_addr, tx, &headers, mount_clone).await
   });
 
-  println!("Running on http://{ip_addr}{mount}");
+  println!("Serving stream on http://{}:{}{}", ip, config.mount_port, mount);
 
   futures_util::future::pending::<()>().await;
   Ok(())
