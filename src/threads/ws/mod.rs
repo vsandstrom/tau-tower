@@ -3,15 +3,16 @@ use tokio::sync::broadcast;
 use std::sync::{Arc, Mutex};
 
 use hyper::body::Bytes;
-use tokio_tungstenite::accept_hdr_async;
+use tokio_tungstenite::{accept_hdr_async, WebSocketStream};
 use futures_util::StreamExt;
 use std::net::SocketAddr;
 use std::time::Duration;
 
 use crate::util::{Headers, validate_bos_and_tags, Credentials};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::time::Instant;
+use crate::threads::LOG_TIMEOUT;
 
-pub const MTU: usize = 1500;
 const TIMEOUT: Duration = Duration::from_millis(50);
 
 /// Creates a WebSocket receiver listening to the sender of the ogg opus stream.
@@ -22,18 +23,6 @@ pub async fn thread(
     credentials: Credentials,
     header: Arc<Mutex<Headers>>
 ) {
-  // let url = format!("ws://{}:{}", src_addr.ip() , src_addr.port());
-  // let uri = Uri::builder()
-  //   .scheme("ws")
-  //   .authority(format!("{}:{}", src_addr.ip(), src_addr.port()))
-  //   .path_and_query("/")
-  //   .build()
-  //   .unwrap();
-  // let uri = Uri::from_static(&url);
-  let mut temp_headers: Vec<Bytes> = vec!();
-  let mut headers_parsed = false;
-  let mut open_endpoint = true;
-
   let server = match TcpListener::bind(src_addr).await {
     Ok(s) => s,
     Err(e) => {
@@ -44,67 +33,95 @@ pub async fn thread(
 
   loop {
     match server.accept().await {
-      Ok((stream, _)) => {
-        match accept_hdr_async(stream, |req: &Request<()>, mut res: hyper::Response<()>| {
-          let username = req.headers()
-            .get("username")
-            .map(|u| u.to_str().unwrap());
-
-          let password = req.headers()
-            .get("password")
-            .map(|pw| pw.to_str().unwrap());
-
-          let port = req.headers()
-            .get("port")
-            .map(|port| port.to_str().unwrap().parse::<u16>().unwrap());
-
-          if !credentials.validate(username, password, port) {
-            let res = Response::builder()
-              .status(StatusCode::FORBIDDEN)
-              .body(Some("Credentials do not match".to_string()))
-              .unwrap();
-            return Err(res);
-          }
-
-          *res.status_mut() = StatusCode::SWITCHING_PROTOCOLS;
-          Ok(res)
-        }).await {
+      Ok((stream, addr)) => {
+        match accept_hdr_async(stream, |req: &Request<()>, res: hyper::Response<()>|
+          validate_headers(req, res, &credentials)
+        ).await {
           Ok(mut ws_stream) => {
-            'connections: while let Some(msg) = ws_stream.next().await  {
-              let page = match msg {
-                Ok(m) => m.into_data(),
-                Err(e) => {
-                  eprintln!("Unrecognized message: {e}");
-                  break 'connections;
-                }
-              };
-              if validate_bos_and_tags(&page).is_ok() {
-                temp_headers.push(page);
-              } else {
-                if !headers_parsed && let Ok(mut h) = header.lock() && let None = h.headers {
-                  h.prepare_headers(&temp_headers);
-                  headers_parsed = true;
-                }
-                match tx.send(page) {
-                  Ok(_) => { open_endpoint = true; },
-                  Err(e) => { 
-                    if open_endpoint {
-                      open_endpoint = false;
-                      eprintln!("could not open client stream: {e}"); 
-                    }
-                  }
-                }
-              }
-            }
+            receive_data(&mut ws_stream, header.clone(), tx.clone()).await;
           },
           Err(e) => {
+            eprintln!("Handshake failed from {addr}: {e}");
           }
         }
       },
       Err(e) => {
-        // eprintln!("WS connect failed {e}");
         tokio::time::sleep(TIMEOUT).await;
       }
     }
   }
 }
+
+fn validate_headers(req: &Request<()>, mut res: hyper::Response<()>, credentials: &Credentials) -> Result<Response<()>, Response<Option<String>>> {
+  let username = req.headers()
+    .get("username")
+    .and_then(|u| u.to_str().ok());
+
+  let password = req.headers()
+    .get("password")
+    .and_then(|pw| pw.to_str().ok());
+
+  let port = req.headers()
+    .get("port")
+    .and_then(|port| port.to_str().ok()?.parse::<u16>().ok());
+
+  if username.is_none() || password.is_none() {
+    return Err(
+      Response::builder()
+        .status(StatusCode::UNAUTHORIZED)
+        .body(Some("Missing credentials".to_string()))
+        .unwrap()
+    )
+  }
+
+  if port.is_none() {
+    return Err(
+      Response::builder()
+        .status(StatusCode::BAD_REQUEST)
+        .body(Some("Missing or invalid port".to_string()))
+        .unwrap()
+    )
+  }
+
+  if !credentials.validate(username, password, port) {
+    return Err(
+      Response::builder()
+        .status(StatusCode::FORBIDDEN)
+        .body(Some("Credentials do not match".to_string()))
+        .unwrap()
+    );
+  }
+
+  Ok(res)
+}
+
+async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Mutex<Headers>>, tx: broadcast::Sender<Bytes>) {
+  let mut temp_headers = vec!();
+  let mut headers_parsed = false;
+  let mut last_log = Instant::now();
+  'connections: while let Some(msg) = ws_stream.next().await  {
+    let page = match msg {
+      Ok(m) => m.into_data(),
+      Err(e) => {
+        eprintln!("Unrecognized message: {e}");
+        break 'connections;
+      }
+    };
+    if validate_bos_and_tags(&page).is_ok() {
+      temp_headers.push(page);
+    } else {
+      if !headers_parsed 
+      && let Ok(mut h) = header.lock() 
+      && let None = h.headers {
+        h.prepare_headers(&temp_headers);
+        headers_parsed = true;
+      }
+      if let Err(e) = tx.send(page) && last_log.elapsed() > LOG_TIMEOUT {
+        eprintln!("could not open client stream: {e}"); 
+        last_log = Instant::now();
+      }
+    }
+  }
+}
+
+
