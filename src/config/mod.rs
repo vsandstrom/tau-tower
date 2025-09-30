@@ -1,6 +1,7 @@
 use dialoguer::{Input, Password};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
+use inline_colorization::*;
 
 use crate::args::validate_port;
 
@@ -8,7 +9,7 @@ use crate::args::validate_port;
 pub struct Config {
     pub username: String,
     pub password: String,
-    pub url: String,
+    pub ip: String,
     pub listen_port: u16,
     pub mount_port: u16,
     pub mount: String,
@@ -81,43 +82,43 @@ impl Config {
       Self::load_config(&path)
     } else {
       println!(
-        "No config found at '{}'. Let's create one: ",
+        "\n{color_bright_yellow}No config found at '{}'. Let's create one: {color_reset}",
         path.display()
       );
-      println!("Credentials must correspond to the source stream config");
+      println!("{color_bright_red}Credentials must correspond to the source stream config{color_reset}\n");
       let username: String = Input::new()
-        .with_prompt("Username")
+        .with_prompt(format!("{color_bright_yellow}Username{color_reset}"))
         .interact_text()
         .map_err(|e| TauConfigError::Input(e.to_string()))?;
 
       let password: String = Password::new()
-        .with_prompt("Password")
+        .with_prompt(format!("{color_bright_yellow}Password{color_reset}"))
         .interact()
         .map_err(|e| TauConfigError::Input(e.to_string()))?;
 
-      let url: String = Input::new()
-        .with_prompt("Public IP for server")
+      let ip: String = Input::new()
+        .with_prompt(format!("{color_bright_yellow}Public IP for server{color_reset}"))
         .default("127.0.0.1".to_string())
         .interact_text()
         .map_err(|e| TauConfigError::Input(e.to_string()))
         .and_then(crate::args::validate_ip)?;
 
       let listen_port: u16 = Input::new()
-        .with_prompt("Source port")
+        .with_prompt(format!("{color_bright_yellow}Source port{color_reset}"))
         .default(8000)
         .interact_text()
         .map_err(|e| TauConfigError::Input(e.to_string()))
         .and_then(validate_port)?;
       
       let mount_port: u16 = Input::new()
-        .with_prompt("Broadcast port")
+        .with_prompt(format!("{color_bright_yellow}Broadcast port{color_reset}"))
         .default(8001)
         .interact_text()
         .map_err(|e| TauConfigError::Input(e.to_string()))
         .and_then(validate_port)?;
 
       let mount = Input::new()
-        .with_prompt("Mount endpoint")
+        .with_prompt(format!("{color_bright_yellow}Mount endpoint{color_reset}"))
         .default("tau.ogg".into())
         .interact_text()
         .map_err(|e| TauConfigError::Input(e.to_string()))?;
@@ -125,7 +126,7 @@ impl Config {
       let config = Config {
         username,
         password,
-        url,
+        ip,
         listen_port,
         mount_port,
         mount,
@@ -137,7 +138,9 @@ impl Config {
 
       let toml_string = toml::to_string_pretty(&config).unwrap();
       fs::write(&path, toml_string)?;
-
+      println!("\
+        \n{color_bright_yellow}A config file has been written to:{color_reset}\n\t\
+        {color_bright_red}{}{color_reset}\n", path.display());
       Ok(config)
     }
   }

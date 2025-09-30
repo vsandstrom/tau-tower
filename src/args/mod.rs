@@ -34,11 +34,11 @@ pub(crate) struct Args {
     pub reset_config: bool,
 }
 
-pub fn validate_ip(url: String) -> Result<String, TauConfigError> {
-  if !is_ip(&url) {
-    return Err(TauConfigError::InvalidIp(url));
+pub fn validate_ip(ip: String) -> Result<String, TauConfigError> {
+  if !is_ip(&ip) {
+    return Err(TauConfigError::InvalidIp(ip));
   }
-  Ok(url)
+  Ok(ip)
 }
 
 fn parse_port(p: &str) -> Result<u16, TauConfigError> {

@@ -46,13 +46,14 @@ pub async fn thread(
         }
       },
       Err(e) => {
+        eprintln!("{e}");
         tokio::time::sleep(TIMEOUT).await;
       }
     }
   }
 }
 
-fn validate_headers(req: &Request<()>, mut res: hyper::Response<()>, credentials: &Credentials) -> Result<Response<()>, Response<Option<String>>> {
+fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &Credentials) -> Result<Response<()>, Response<Option<String>>> {
   let username = req.headers()
     .get("username")
     .and_then(|u| u.to_str().ok());

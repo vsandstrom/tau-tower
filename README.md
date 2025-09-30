@@ -6,6 +6,12 @@ a audio stream from an instance of
 Modelled after the Icecast software, it serves a html audio stream that can be
 used in a audio tag on any other website.
 
+You should run this on a remote server, such as a AWS, Digital Ocean or any VPS
+with the correct priviledges. 
+- Note that the smallest available Digital Ocean 'Droplet' does not have enough
+  RAM to build this project locally. The workaround is to build for that 
+  architecture using ex: `cargo build --target x86_64-unknown-linux-gnu`. 
+
 ---
 
 To install:
@@ -27,9 +33,17 @@ If you want to temporarily overwrite the config, you are able to pass arguments.
 
 ```bash
 # Ex: Uses temporary credentials, and disables the local recording. 
-$ tau \
+$ tau-tower \
   --listen-port <listen-port> \
   --mount-port <mount-port> \
 ```
 
+
+### Dependencies
+
+**On Linux** (using apt):
+```bash
+$ sudo apt update
+$ sudo apt install build-essential
+```
 

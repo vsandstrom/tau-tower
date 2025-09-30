@@ -1,3 +1,4 @@
+#![allow(unused)]
 use hyper::Result;
 use tokio::sync::broadcast;
 use std::sync::{Arc, Mutex};
@@ -5,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use hyper::body::Bytes;
 
 use crate::util::{validate_bos_and_tags, Headers};
-use super::MTU;
+pub const MTU: usize = 1500;
 
 /// Creates a Udp receiver listening to the sender of the ogg opus stream.
 /// Appending the ogg opus blocks to a producer/consumer object.
