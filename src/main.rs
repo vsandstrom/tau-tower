@@ -13,7 +13,7 @@ use hyper::body::Bytes;
 use clap::Parser;
 use inline_colorization::*;
 
-use crate::threads::{http, udp, ws};
+use crate::threads::{http, ws};
 use crate::util::{Headers, Credentials};
 use crate::config::Config;
 use crate::args::Args;
@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
   // used to send ogg opus blocks between Udp thread to WebSocket thread
   let (tx, _) = broadcast::channel::<Bytes>(128);
 
-  let ip = Ipv4Addr::from_str(&config.url).unwrap();
+  let ip = Ipv4Addr::from_str(&config.ip).unwrap();
   let server_addr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.mount_port);
   let listen_addr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.listen_port);
 
@@ -57,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
     http::thread(server_addr, tx, &headers, mount_clone).await
   });
 
-  println!("{color_bright_yellow}Broadcasting on:{color_reset}\t{color_cyan}http://{}:{}{}{color_cyan}", ip, config.mount_port, mount);
+  println!("{color_bright_yellow}Broadcasting on:{color_reset}\n\t{color_cyan}http://{}:{}{}{color_cyan}", ip, config.mount_port, mount);
 
   futures_util::future::pending::<()>().await;
   Ok(())
