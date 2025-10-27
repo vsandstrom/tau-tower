@@ -27,6 +27,7 @@ $ $HOME/.config/tau/tower.toml
 
 If there is no config file located there, you will be prompted to create one. 
 
+
 [![asciicast](https://asciinema.org/a/JqdeXeILf0lALG34pZzAarmih.svg)](https://asciinema.org/a/JqdeXeILf0lALG34pZzAarmih)
 
 If you want to temporarily overwrite the config, you are able to pass arguments.
@@ -38,7 +39,6 @@ $ tau-tower \
   --mount-port <mount-port> \
 ```
 
-
 ### Dependencies
 
 **On Linux** (using apt):
@@ -46,4 +46,3 @@ $ tau-tower \
 $ sudo apt update
 $ sudo apt install build-essential
 ```
-
