@@ -24,6 +24,8 @@
         openssl
       ];
 
+      OPENSSL_NO_VENDOR = 1;
+
       doCheck = false;
     };
   });
