@@ -36,6 +36,7 @@ pub fn validate_tags(data: Bytes) -> Result<Option<Bytes>, ()> {
   let offset = 27+n_segs;
   if data.len() < 27 + 8 { return Err(()) }
   if &data[offset..offset+8] == b"OpusTags" {
+    println!("header tags found");
     return Ok(Some(data));
   }
   Err(())
@@ -46,6 +47,7 @@ pub fn validate_header(data: Bytes) -> Result<Option<Bytes>, ()> {
   let offset = 27+n_segs;
   if data.len() < 27 + 8 { return Err(()) }
   if &data[offset..offset+8] == b"OpusHead" {
+    println!("header found");
     return Ok(Some(data));
   }
   Err(())
