@@ -109,18 +109,19 @@ async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Mu
       }
     };
 
-    if let Some(head) = validate_header(page.clone()).unwrap_or_default() { 
-      temp_headers.0 = Some(head); 
-    } 
-    if let Some(tags) = validate_tags(page.clone()).unwrap_or_default() { 
-      temp_headers.1 = Some(tags); 
-    } 
-    if !headers_parsed // short circuit if headers have already been parsed.
-      && let (Some(head), Some(tags)) = &temp_headers 
-      && let Ok(mut h) = header.lock() 
-      && let None = h.headers {
-      h.prepare_headers(&(head, tags));
-      headers_parsed = true;
+    if !headers_parsed { // short circuit if headers have already been parsed.
+      if let Ok(head) = validate_header(page.clone()) { 
+        temp_headers.0 = head; 
+      } 
+      if let Ok(tags) = validate_tags(page.clone()) { 
+        temp_headers.1 = tags; 
+      } 
+      if let (Some(head), Some(tags)) = &temp_headers 
+        && let Ok(mut h) = header.lock() 
+        && let None = h.headers {
+        h.prepare_headers(&(head, tags));
+        headers_parsed = true;
+      }
     }
     if let Err(e) = tx.send(page) && last_log.elapsed() > LOG_TIMEOUT {
       eprintln!("could not open client stream: {e}"); 
