@@ -8,7 +8,7 @@ use futures_util::StreamExt;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use crate::util::{Headers, validate_bos_and_tags, validate_tags, validate_header, Credentials};
+use crate::util::{Headers, validate_tags, validate_header, Credentials};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::Instant;
 use crate::threads::LOG_TIMEOUT;
