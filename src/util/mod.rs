@@ -23,17 +23,46 @@ impl Credentials {
 pub struct Headers {pub headers: Option<Bytes>}
 
 impl Headers {
-  pub fn prepare_headers(&mut self, buf: &[Bytes]) {
-    self.headers = Some(Bytes::copy_from_slice(&[&buf[0][..], &buf[1][..]].concat()))
+  // pub fn prepare_headers(&mut self, buf: &[Bytes]) {
+  //   self.headers = Some(Bytes::copy_from_slice(&[&buf[0][..], &buf[1][..]].concat()))
+  // }
+
+  pub fn prepare_headers(&mut self, buf: &(&Bytes, &Bytes)) {
+    self.headers = Some(Bytes::copy_from_slice(&[&buf.0[..], &buf.1[..]].concat()))
   }
 }
 
-pub fn validate_bos_and_tags(data: & Bytes) -> core::result::Result<&Bytes, ()> {
+fn get_header_segment(data: &Bytes) -> Result<usize, ()> {
   let n_segs = data[26] as usize;
   let offset = 27+n_segs;
   if data.len() < 27 + 8 { return Err(()) }
-  if matches!(&data[offset..offset+8], b"OpusTags" | b"OpusHead") {
-    return Ok(data);
+  Ok(offset)
+}
+
+pub fn validate_tags(data: Bytes) -> Result<Option<Bytes>, ()> {
+  let offset = get_header_segment(&data)?;
+  if &data[offset..offset+8] == b"OpusTags" {
+    println!("header tags found");
+    return Ok(Some(data));
   }
   Err(())
 }
+
+pub fn validate_header(data: Bytes) -> Result<Option<Bytes>, ()> {
+  let offset = get_header_segment(&data)?;
+  if &data[offset..offset+8] == b"OpusHead" {
+    println!("header found");
+    return Ok(Some(data));
+  }
+  Err(())
+}
+
+// pub fn validate_bos_and_tags(data: &Bytes) -> core::result::Result<&Bytes, ()> {
+//   let n_segs = data[26] as usize;
+//   let offset = 27+n_segs;
+//   if data.len() < 27 + 8 { return Err(()) }
+//   if matches!(&data[offset..offset+8], b"OpusTags" | b"OpusHead") {
+//     return Ok(data);
+//   }
+//   Err(())
+// }

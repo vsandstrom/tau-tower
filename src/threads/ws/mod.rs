@@ -8,7 +8,7 @@ use futures_util::StreamExt;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use crate::util::{Headers, validate_bos_and_tags, Credentials};
+use crate::util::{Headers, validate_tags, validate_header, Credentials};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::Instant;
 use crate::threads::LOG_TIMEOUT;
@@ -97,7 +97,7 @@ fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &C
 }
 
 async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Mutex<Headers>>, tx: broadcast::Sender<Bytes>) {
-  let mut temp_headers = vec!();
+  let mut temp_headers: (Option<Bytes>, Option<Bytes>) = (None, None);
   let mut headers_parsed = false;
   let mut last_log = Instant::now();
   'connections: while let Some(msg) = ws_stream.next().await  {
@@ -108,19 +108,24 @@ async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Mu
         break 'connections;
       }
     };
-    if validate_bos_and_tags(&page).is_ok() {
-      temp_headers.push(page);
-    } else {
-      if !headers_parsed 
-      && let Ok(mut h) = header.lock() 
-      && let None = h.headers {
-        h.prepare_headers(&temp_headers);
+
+    if !headers_parsed { // short circuit if headers have already been parsed.
+      if let Ok(head) = validate_header(page.clone()) { 
+        temp_headers.0 = head; 
+      } 
+      if let Ok(tags) = validate_tags(page.clone()) { 
+        temp_headers.1 = tags; 
+      } 
+      if let (Some(head), Some(tags)) = &temp_headers 
+        && let Ok(mut h) = header.lock() 
+        && let None = h.headers {
+        h.prepare_headers(&(head, tags));
         headers_parsed = true;
       }
-      if let Err(e) = tx.send(page) && last_log.elapsed() > LOG_TIMEOUT {
-        eprintln!("could not open client stream: {e}"); 
-        last_log = Instant::now();
-      }
+    }
+    if let Err(e) = tx.send(page) && last_log.elapsed() > LOG_TIMEOUT {
+      eprintln!("could not open client stream: {e}"); 
+      last_log = Instant::now();
     }
   }
 }
