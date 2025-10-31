@@ -97,7 +97,7 @@ fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &C
 }
 
 async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Mutex<Headers>>, tx: broadcast::Sender<Bytes>) {
-  let mut temp_headers = (None, None);
+  let mut temp_headers: (Option<Bytes>, Option<Bytes>) = (None, None);
   let mut headers_parsed = false;
   let mut last_log = Instant::now();
   'connections: while let Some(msg) = ws_stream.next().await  {
@@ -109,15 +109,16 @@ async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Mu
       }
     };
 
-    temp_headers.0 = validate_header(page.clone()).unwrap_or_default();
-    temp_headers.1 = validate_tags(page.clone()).unwrap_or_default();
-
-    if !headers_parsed 
-    && let Ok(mut h) = header.lock() 
-    && let None = h.headers 
-    && let Some(head) = & temp_headers.0 
-    && let Some(tags) = & temp_headers.1
-    {
+    if let Some(head) = validate_header(page.clone()).unwrap_or_default() { 
+      temp_headers.0 = Some(head); 
+    } 
+    if let Some(tags) = validate_tags(page.clone()).unwrap_or_default() { 
+      temp_headers.1 = Some(tags); 
+    } 
+    if !headers_parsed // short circuit if headers have already been parsed.
+      && let (Some(head), Some(tags)) = &temp_headers 
+      && let Ok(mut h) = header.lock() 
+      && let None = h.headers {
       h.prepare_headers(&(head, tags));
       headers_parsed = true;
     }

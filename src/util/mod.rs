@@ -31,10 +31,15 @@ impl Headers {
   }
 }
 
-pub fn validate_tags(data: Bytes) -> Result<Option<Bytes>, ()> {
+fn get_header_segment(data: &Bytes) -> Result<usize, ()> {
   let n_segs = data[26] as usize;
   let offset = 27+n_segs;
   if data.len() < 27 + 8 { return Err(()) }
+  Ok(offset)
+}
+
+pub fn validate_tags(data: Bytes) -> Result<Option<Bytes>, ()> {
+  let offset = get_header_segment(&data)?;
   if &data[offset..offset+8] == b"OpusTags" {
     println!("header tags found");
     return Ok(Some(data));
@@ -43,9 +48,7 @@ pub fn validate_tags(data: Bytes) -> Result<Option<Bytes>, ()> {
 }
 
 pub fn validate_header(data: Bytes) -> Result<Option<Bytes>, ()> {
-  let n_segs = data[26] as usize;
-  let offset = 27+n_segs;
-  if data.len() < 27 + 8 { return Err(()) }
+  let offset = get_header_segment(&data)?;
   if &data[offset..offset+8] == b"OpusHead" {
     println!("header found");
     return Ok(Some(data));
@@ -53,12 +56,12 @@ pub fn validate_header(data: Bytes) -> Result<Option<Bytes>, ()> {
   Err(())
 }
 
-pub fn validate_bos_and_tags(data: &Bytes) -> core::result::Result<&Bytes, ()> {
-  let n_segs = data[26] as usize;
-  let offset = 27+n_segs;
-  if data.len() < 27 + 8 { return Err(()) }
-  if matches!(&data[offset..offset+8], b"OpusTags" | b"OpusHead") {
-    return Ok(data);
-  }
-  Err(())
-}
+// pub fn validate_bos_and_tags(data: &Bytes) -> core::result::Result<&Bytes, ()> {
+//   let n_segs = data[26] as usize;
+//   let offset = 27+n_segs;
+//   if data.len() < 27 + 8 { return Err(()) }
+//   if matches!(&data[offset..offset+8], b"OpusTags" | b"OpusHead") {
+//     return Ok(data);
+//   }
+//   Err(())
+// }
