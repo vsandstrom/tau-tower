@@ -6,7 +6,7 @@ on:
       - "v*.*.*"
 jobs:
   release:
-    runs-on: mac-latest
+    runs-on: macos-latest
     permissions:
       contents: write
       pull-requests: write
@@ -56,4 +56,7 @@ jobs:
       - name: create release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: 'tau-tower_macOS_intel.zip, tau-tower_macOS_arm.zip, tau-tower_linux.zip' 
+          artifacts: \
+            tau-tower_macOS_intel.zip
+            tau-tower_macOS_arm.zip
+            tau-tower_linux.zip 
