@@ -35,21 +35,21 @@ jobs:
       - name: compile intel mac and zip
         run: |
           $CMD --target=x86_64-apple-darwin
-          mv $TARGET ./$DEST
+          mv target/x86_64-apple-darwin/release/tau-tower ./$DEST
           zip -r tau-tower_macOS_intel.zip $DEST
           rm -r $DEST
 
       - name: compile arm mac and zip
         run: |
           $CMD --target=aarch64-apple-darwin
-          mv $TARGET ./$DEST
+          mv target/aarch64-apple-darwin/release/tau-tower ./$DEST
           zip -r tau-tower_macOS_arm.zip $DEST
           rm -r $DEST
       
       - name: compile linux and zip
         run: | 
           $CMD --target=x86_64-unknown-linux-gnu
-          mv $TARGET ./$DEST
+          mv target/x86_64-unknown-linux-gnu/release/tau-tower ./$DEST
           zip -r tau-tower_linux.zip $DEST
           rm -r $DEST
 
