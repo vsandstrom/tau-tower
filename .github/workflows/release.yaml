@@ -13,7 +13,6 @@ jobs:
       repository-projects: write
     env:
       CMD: cargo build --release
-      TARGET: target/release/tau-tower
       DEST: tau-tower
       TOOLCHAINS: x86_64-apple-darwin aarch64-apple-darwin x86_64-unknown-linux-gnu
       CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: x86_64-linux-gnu-gcc
