@@ -72,8 +72,9 @@ jobs:
           files: tau-tower_*
           tag_name: ${{ github.ref_name }}
           body: "Automated release of ${{ github.ref_name }}."
-          make_latest: true
-          prerelease: false
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true
         env:
           GITHUB_TOKEN: ${{ env.RELEASE_TOKEN }}
 
