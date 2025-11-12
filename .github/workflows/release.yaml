@@ -5,52 +5,75 @@ on:
     tags:
       - "v*.*.*"
 jobs:
-  release:
-    runs-on: macos-latest
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            toolchain: x86_64-unknown-linux-gnu
+            artifact: tau-tower_linux.zip
+          - os: macos-latest
+            toolchain: aarch64-apple-darwin 
+            artifact: tau-tower_macOS_arm.zip
+          - os: macos-15-intel
+            toolchain: x86_64-apple-darwin 
+            artifact: tau-tower_macOS_intel.zip
     permissions:
       contents: write
       pull-requests: write
       repository-projects: write
     env:
-      CMD: cargo build --release
+      CMD: cargo build --release 
       DEST: tau-tower
-      TOOLCHAINS: x86_64-apple-darwin aarch64-apple-darwin x86_64-unknown-linux-gnu
-      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: x86_64-linux-gnu-gcc
 
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: install linux cross-compile dependencies
-        run: |
-          brew install messense/macos-cross-toolchains/x86_64-unknown-linux-gnu
-
       - name: install rust toolchains
         run: |
-          for tc in ${TOOLCHAINS[@]}; do
-            rustup target install $tc
-          done
+          rustup target install ${{ matrix.toolchain }}
 
-      - name: compile intel mac and zip
+      - name: compile and zip
         run: |
-          $CMD --target=x86_64-apple-darwin
-          mv target/x86_64-apple-darwin/release/tau-tower $DEST
-          zip tau-tower_macOS_intel.zip $DEST
+          $CMD --target=${{matrix.toolchain}} --verbose
+          mv target/${{matrix.toolchain}}/release/tau-tower $DEST
+          zip ${{matrix.artifact}} $DEST
           rm $DEST
 
-      - name: compile arm mac and zip
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{matrix.artifact}}
+          path: ${{matrix.artifact}}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: .
+          merge-multiple: true    
+      - name: Configure token
         run: |
-          $CMD --target=aarch64-apple-darwin
-          mv target/aarch64-apple-darwin/release/tau-tower $DEST
-          zip tau-tower_macOS_arm.zip $DEST
-          rm $DEST
-      
-      - name: compile linux and zip
-        run: | 
-          $CMD --target=x86_64-unknown-linux-gnu
-          mv target/x86_64-unknown-linux-gnu/release/tau-tower $DEST
-          zip tau-tower_linux.zip $DEST
-          rm $DEST
+          if [ -n "${{ secrets.PERSONAL_TOKEN }}" ]; then
+            echo "RELEASE_TOKEN=${{ secrets.PERSONAL_TOKEN }}" >> $GITHUB_ENV
+          else
+            echo "RELEASE_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+          fi
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tau-tower_*
+          tag_name: ${{ github.ref_name }}
+          body: "Automated release of ${{ github.ref_name }}."
+        env:
+          GITHUB_TOKEN: ${{ env.RELEASE_TOKEN }}
 
       - name: create release
         uses: ncipollo/release-action@v1
