@@ -1,3 +1,5 @@
+[![Compiles on macOS (Intel / Silicon), Ubuntu and NixOS](https://github.com/tau-org/tau-tower/actions/workflows/rust.yml/badge.svg?event=pull_request)](https://github.com/tau-org/tau-tower/actions/workflows/rust.yml)
+
 ## Usage:
 This tool is built for livestreaming audio to the world wide web, broadcasting 
 a audio stream from an instance of 
