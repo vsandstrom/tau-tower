@@ -20,16 +20,16 @@ jobs:
           - os: macos-15-intel
     steps:
     - uses: actions/checkout@v4
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ matrix.os }}-cargo-
+#    - name: Cache Rust dependencies
+#      uses: actions/cache@v4
+#      with:
+#        path: |
+#          ~/.cargo/registry
+#          ~/.cargo/git
+#          target
+#        key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+#        restore-keys: |
+#          ${{ matrix.os }}-cargo-
     - name: Build
       run: cargo build --verbose
     - name: Run tests
