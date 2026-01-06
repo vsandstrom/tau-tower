@@ -5,16 +5,17 @@ mod args;
 mod util;
 
 use std::net::{Ipv4Addr, SocketAddr};
-use tokio::sync::broadcast;
+use anyhow::{Context, Ok};
+use tokio::sync::{RwLock, broadcast};
 use tokio::task;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::str::FromStr;
 use hyper::body::Bytes;
 use clap::Parser;
-use inline_colorization::*;
 
 use crate::threads::{http, ws};
-use crate::util::{Headers, Credentials};
+use crate::util::credentials::Credentials;
+use crate::util::ui::server_started_info;
 use crate::config::Config;
 use crate::args::Args;
 
@@ -25,39 +26,84 @@ const END_POINT: &str = "tau.ogg";
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
   let args = Args::parse();
-  let config = Config::load_or_create(args.reset_config).map(|c| c.merge_cli_args(&args))?;
+  let config = Config::load_or_create(args.reset_config)
+    .map(|c| c.merge_cli_args(&args))?;
+
+
   let creds = Credentials{
     username: config.username.clone(), 
     password: config.password.clone(),
   };
-
-  let headers = Arc::new(Mutex::new(Headers{headers: None})); 
-  // used to send ogg opus blocks between Udp thread to WebSocket thread
-  let (tx, _) = broadcast::channel::<Bytes>(128);
-
-  let ip = Ipv4Addr::from_str(&config.ip).unwrap();
-  let server_addr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.mount_port);
-  let listen_addr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED), config.listen_port);
-
+  
+  /* 
+   * Set the endpoint where the broadcast is served from this server
+   */
   // TODO: swap to value from config
-  let end_point = format!("/{END_POINT}");
-  let mount: Arc<str> = Arc::from(end_point);
+  let endpoint = format!("/{END_POINT}");
+  let mount: Arc<str> = Arc::from(endpoint);
   let mount_clone = mount.clone();
 
-  let tx_clone = tx.clone();
+  /*
+   * Headers container to store OggOpus headers from source broadcast, for rebroadcasting 
+   * when a listener connects to this servers stream.
+   */
+
+  let headers = Arc::new(RwLock::new(None)); 
   let headers_clone = headers.clone();
-  // receive audio
-  task::spawn(async move {
-    ws::thread(tx_clone, listen_addr, creds, headers_clone).await;
-  });
 
-  // serve audio stream
-  task::spawn(async move {
-    http::thread(server_addr, tx, &headers, mount_clone).await
-  });
+  /* 
+   * Single producer - multiple identical streams. Used to capture the audio signal from the 
+   * broadcasting source to each listener of this server. 
+   * */ 
+  let (tx, _) = broadcast::channel::<Bytes>(1024);
+  let tx_clone = tx.clone();
 
-  println!("{color_bright_yellow}Broadcasting on:{color_reset}\n\t{color_cyan}http://{}:{}{}{color_cyan}", ip, config.mount_port, mount);
+  // remote source address: 
+  let ip = Ipv4Addr::from_str(&config.ip).context("Invalid IP in config")?;
 
-  futures_util::future::pending::<()>().await;
+  // local listening and broadcasting addresses:
+  let local_ip = std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+  let listen_addr = SocketAddr::new(local_ip, config.listen_port);
+  let server_addr = SocketAddr::new(local_ip, config.mount_port);
+
+
+  /*
+   * Receiving task, listens to remote stream over WebSocket
+   */
+  let listener_task = task::spawn( 
+    ws::thread(
+      tx_clone,
+      listen_addr,
+      creds,
+      headers_clone
+    )
+  );
+
+  /*
+   * Broadcasting task, broadcasts to all listeners over an http media stream
+   */
+  let server_task = task::spawn(
+    http::thread(
+      server_addr,
+      tx,
+      headers,
+      mount_clone
+    )
+  );
+
+  server_started_info(ip, config.mount_port, &mount);
+
+  /*
+   * Server will shut down if ctrl_c or error in either task is throwed. 
+   * The tasks will loop indefinitely if they are able to bind to their respective TCP port.
+   */
+  tokio::select! {
+    res = listener_task => { res?? },
+    res = server_task => {res??},
+    _ = tokio::signal::ctrl_c() => {
+        println!("Shutdown signal received");
+    }
+  }
+  // futures_util::future::pending::<()>().await;
   Ok(())
 }

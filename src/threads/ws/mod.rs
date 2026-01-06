@@ -1,17 +1,19 @@
 use hyper::{Request, Response, StatusCode};
 use tokio::sync::broadcast;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use hyper::body::Bytes;
 use tokio_tungstenite::{accept_hdr_async, WebSocketStream};
+use tokio::sync::RwLock;
 use futures_util::StreamExt;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use crate::util::{Headers, validate_tags, validate_header, Credentials};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::Instant;
 use crate::threads::LOG_TIMEOUT;
+use crate::util::credentials::Credentials;
+use crate::util::ogg_headers::{Headers, validate_tags, validate_header};
 
 const TIMEOUT: Duration = Duration::from_millis(50);
 
@@ -21,13 +23,12 @@ pub async fn thread(
     tx: broadcast::Sender<Bytes>,
     src_addr: SocketAddr,
     credentials: Credentials,
-    header: Arc<Mutex<Headers>>
-) {
+    header: Arc<RwLock<Option<Headers>>>
+) -> anyhow::Result<()> {
   let server = match TcpListener::bind(src_addr).await {
     Ok(s) => s,
     Err(e) => {
-      eprintln!("Could not bind to source address: {e}");
-      return;
+      anyhow::bail!("Could not bind to source address: {e}");
     }
   };
 
@@ -51,6 +52,9 @@ pub async fn thread(
       }
     }
   }
+
+  #[allow(unreachable_code)]
+  anyhow::Ok(())
 }
 
 fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &Credentials) -> Result<Response<()>, Response<Option<String>>> {
@@ -83,7 +87,7 @@ fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &C
   Ok(res)
 }
 
-async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Mutex<Headers>>, tx: broadcast::Sender<Bytes>) {
+async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<RwLock<Option<Headers>>>, tx: broadcast::Sender<Bytes>) {
   let mut temp_headers: (Option<Bytes>, Option<Bytes>) = (None, None);
   let mut headers_parsed = false;
   let mut last_log = Instant::now();
@@ -98,15 +102,16 @@ async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Mu
 
     if !headers_parsed { // short circuit if headers have already been parsed.
       if let Ok(head) = validate_header(page.clone()) { 
-        temp_headers.0 = head; 
+        temp_headers.0 = Some(head); 
       } 
       if let Ok(tags) = validate_tags(page.clone()) { 
-        temp_headers.1 = tags; 
+        temp_headers.1 = Some(tags); 
       } 
+      
       if let (Some(head), Some(tags)) = &temp_headers 
-        && let Ok(mut h) = header.lock() 
-        && let None = h.headers {
-        h.prepare_headers(&(head, tags));
+        && let Ok(mut h) = header.try_write() 
+        && let None = *h {
+        *h = Some(Headers::new((head.clone(), tags.clone())));
         headers_parsed = true;
       }
     }

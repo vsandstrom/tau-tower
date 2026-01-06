@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 use inline_colorization::*;
 
-use crate::args::validate_port;
+use crate::util::ip::{validate_ip, validate_port};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -101,7 +101,7 @@ impl Config {
         .default("127.0.0.1".to_string())
         .interact_text()
         .map_err(|e| TauConfigError::Input(e.to_string()))
-        .and_then(crate::args::validate_ip)?;
+        .and_then(validate_ip)?;
 
       let listen_port: u16 = Input::new()
         .with_prompt(format!("{color_bright_yellow}Source port{color_reset}"))
@@ -138,9 +138,7 @@ impl Config {
 
       let toml_string = toml::to_string_pretty(&config).unwrap();
       fs::write(&path, toml_string)?;
-      println!("\
-        \n{color_bright_yellow}A config file has been written to:{color_reset}\n\t\
-        {color_bright_red}{}{color_reset}\n", path.display());
+      crate::util::ui::config_file_created_info(path);
       Ok(config)
     }
   }
