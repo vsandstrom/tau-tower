@@ -18,10 +18,9 @@ use crate::util::credentials::Credentials;
 use crate::util::ui::server_started_info;
 use crate::config::Config;
 use crate::args::Args;
+use crate::util::ip::filter_mount_endpoint;
 
-const END_POINT: &str = "tau.ogg";
 
-// const MODE: ServerMode = ServerMode::WebSocket;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -34,20 +33,20 @@ async fn main() -> anyhow::Result<()> {
     username: config.username.clone(), 
     password: config.password.clone(),
   };
+
   
   /* 
    * Set the endpoint where the broadcast is served from this server
+   * Validate endpoint - allow for either `endpoint` or `/endpoint` format
    */
-  // TODO: swap to value from config
-  let endpoint = format!("/{END_POINT}");
-  let mount: Arc<str> = Arc::from(endpoint);
+  let endpoint = filter_mount_endpoint(config.mount);
+  let mount: Arc<String> = Arc::from(endpoint.unwrap());
   let mount_clone = mount.clone();
 
   /*
    * Headers container to store OggOpus headers from source broadcast, for rebroadcasting 
    * when a listener connects to this servers stream.
    */
-
   let headers = Arc::new(RwLock::new(None)); 
   let headers_clone = headers.clone();
 
@@ -65,7 +64,6 @@ async fn main() -> anyhow::Result<()> {
   let local_ip = std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED);
   let listen_addr = SocketAddr::new(local_ip, config.listen_port);
   let server_addr = SocketAddr::new(local_ip, config.mount_port);
-
 
   /*
    * Receiving task, listens to remote stream over WebSocket
@@ -104,6 +102,5 @@ async fn main() -> anyhow::Result<()> {
         println!("Shutdown signal received");
     }
   }
-  // futures_util::future::pending::<()>().await;
   Ok(())
 }
