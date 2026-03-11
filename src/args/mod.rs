@@ -1,10 +1,5 @@
-
-
 use clap::Parser;
-
-// use crate::StreamType;
-use crate::config::TauConfigError;
-use is_ip::is_ip;
+use crate::util::ip::{validate_port, parse_port, validate_endpoint};
 
 #[derive(Parser)]
 #[command(name = "tau-tower")]
@@ -27,28 +22,10 @@ pub(crate) struct Args {
     #[arg(short='p', long, value_parser=|p: &str| { validate_port(parse_port(p).unwrap()) })]
     pub mount_port: Option<u16>,
 
-    #[arg(short, long)]
+    #[arg(short, long, value_parser=|m: &str| { validate_endpoint(m) })]
     pub mount: Option<String>,
 
     #[arg(long)]
     pub reset_config: bool,
 }
 
-pub fn validate_ip(ip: String) -> Result<String, TauConfigError> {
-  if !is_ip(&ip) {
-    return Err(TauConfigError::InvalidIp(ip));
-  }
-  Ok(ip)
-}
-
-fn parse_port(p: &str) -> Result<u16, TauConfigError> {
-  p.parse::<u16>()
-    .map_err(|e| TauConfigError::Input(format!("Unable to parse as number: {e}")))
-}
-
-pub fn validate_port(port: u16) -> Result<u16, TauConfigError> {
-  if !(1..=0xFFFF).contains(&port) {
-    return Err(TauConfigError::InvalidPort(port));
-  }
-  Ok(port)
-}

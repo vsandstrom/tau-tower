@@ -1,80 +1,90 @@
-use futures_util::{StreamExt, Stream};
-use http_body_util::{Full, StreamBody, BodyExt, combinators::{BoxBody}};
-use hyper::{ 
-  body::{Bytes, Frame, Incoming}, Method, Request, Response, Result, StatusCode
-};
-use tokio::sync::broadcast;
+mod responses;
 
-use std::sync::{Arc, Mutex};
+use std::net::SocketAddrV4;
+use std::{net::Ipv4Addr, sync::Arc};
 use std::convert::Infallible;
-type HttpResponse = Response<BoxBody<Bytes, Infallible>>;
+use tokio::sync::{RwLock, broadcast};
+use futures_util::StreamExt;
+use hyper::{ 
+  Method, 
+  Request,
+  Response,
+  Result,
+  body::{Bytes, Frame, Incoming}, 
+};
+use http_body_util::{
+  BodyExt,
+  StreamBody,
+  combinators::BoxBody
+};
+
+use crate::util::ogg_headers::Headers;
+use responses::{
+  default_response,
+  stream_response,
+  four_oh_four,
+  prepare_header_stream,
+  wait_for_ogg_headers,
+  apply_cors,
+  cors_preflight_response
+};
 
 pub async fn handle_request(
     req: Request<Incoming>,
     tx: broadcast::Sender<Bytes>,
-    ogg_header: Arc<Mutex<crate::Headers>>,
-    mount: Arc<str>
+    ogg_header: Arc<RwLock<Option<Headers>>>,
+    mount: Arc<String>
 ) -> Result<Response<BoxBody<Bytes, Infallible>>> {
   match (req.method(), req.uri().path()) {
-    (&Method::GET, path) if path == &*mount => {
+    (&Method::GET, path) if path == mount.as_ref() => {
       let rx = tx.subscribe();
       let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
-        .filter_map(|msg| async move { msg.ok() })
-        .map(|chunk| Ok::<Frame<Bytes>, Infallible>( Frame::data( chunk)))
-        .take_while(|res| futures_util::future::ready(res.is_ok()));
+        .filter_map(
+          |msg| 
+          async move { msg.ok() }
+        )
+        .map(
+          |chunk| 
+            Ok::<Frame<Bytes>, Infallible>( 
+              Frame::data( chunk)
+            )
+        )
+        .take_while(
+          |res|
+            futures_util::future::ready(res.is_ok())
+        );
 
-      let stream = ogg_header_stream(ogg_header).chain(stream);
+      // wait for headers to be populated
+      let headers = wait_for_ogg_headers(&ogg_header).await;
+      // prepend the ogg headers to the stream body
+      let stream = prepare_header_stream(headers)
+        .chain(stream);
+
       let body: BoxBody<Bytes, Infallible> = BodyExt::boxed(StreamBody::new(stream));
-      Ok(stream_response(body))
+      let mut res = stream_response(body);
+      apply_cors(&req, &mut res);
+      Ok(res)
     },
 
     (&Method::GET, "/" | "/index.html") => {
-      let html = format!("<html><body><a href=\"/{mount}\">Audio Stream</a></body></html>");
+
+      let html = format!("<html><body><a href=\"{}{mount}\">Audio Stream</a></body></html>",
+        std::net::IpAddr::V4(Ipv4Addr::LOCALHOST).to_string());
       let body = http_body_util::Full::new(Bytes::from(html)).boxed();
-      Ok(default_response(body))
+      let mut res = default_response(body);
+      apply_cors(&req, &mut res);
+      Ok(res)
     },
+    (&Method::OPTIONS, _) => {
+      let mut res = cors_preflight_response();
+      apply_cors(&req, &mut res);
+      Ok(res)
+    }
     _ => {
-      Ok(four_oh_four())
+      let mut res = four_oh_four();
+      apply_cors(&req, &mut res);
+      Ok(res)
     }
   }
 }
 
-fn ogg_header_stream(header: Arc<Mutex<crate::Headers>>) -> impl Stream<Item = core::result::Result<Frame<Bytes>, Infallible>> {
-  futures_util::stream::iter(
-    header
-      .lock()
-      .ok()
-      .and_then(|h| h.headers.clone()).into_iter()
-      .map(|b| Ok(Frame::data(b)))
-  )
-}
-
-fn stream_response(body: BoxBody<Bytes, Infallible>) -> HttpResponse {
-  Response::builder()
-  .status(StatusCode::OK)
-  .header("Content-Type", "audio/ogg; codecs=\"opus\"")
-  .header("Transfer-Encoding", "chunked")
-  .header("Cache-Control", "no-cache")
-  .header("Connection", "keep-alive")
-  .body(body)
-  .unwrap()
-}
-
-fn default_response(body: BoxBody<Bytes, Infallible>) -> HttpResponse {
-  Response::builder()
-  .status(StatusCode::OK)
-  .header("Content-Type", "text/html; charset=utf-8")
-  .body(body)
-  .unwrap()
-}
-
-fn four_oh_four() -> HttpResponse {
-  Response::builder()
-    .status(StatusCode::NOT_FOUND)
-    .body(
-      Full::new("NOT_FOUND".into())
-        .map_err(|e| match e {})
-        .boxed(),
-    )
-  .unwrap()
-}
