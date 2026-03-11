@@ -13,7 +13,6 @@ use std::sync::Arc;
 use std::str::FromStr;
 use hyper::body::Bytes;
 use clap::Parser;
-use regex_lite::Regex;
 
 use crate::threads::{http, ws};
 use crate::util::credentials::Credentials;

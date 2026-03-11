@@ -1,6 +1,5 @@
 mod responses;
 
-use std::net::SocketAddrV4;
 use std::{net::Ipv4Addr, sync::Arc};
 use std::convert::Infallible;
 use tokio::sync::{RwLock, broadcast};
