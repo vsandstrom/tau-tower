@@ -68,7 +68,7 @@ pub async fn handle_request(
     (&Method::GET, "/" | "/index.html") => {
 
       let html = format!("<html><body><a href=\"{}{mount}\">Audio Stream</a></body></html>",
-        std::net::IpAddr::V4(Ipv4Addr::LOCALHOST).to_string());
+        std::net::IpAddr::V4(Ipv4Addr::LOCALHOST));
       let body = http_body_util::Full::new(Bytes::from(html)).boxed();
       let mut res = default_response(body);
       apply_cors(&req, &mut res);

@@ -33,7 +33,7 @@ const CORS_REQ_SRC: &str = "http://127.0.0.1:4000"; // localhost asciinema
 /// Prepares the Ogg Opus headers, captured from the source stream, to be broadcast on every new
 /// listener connection.
 pub(super) fn prepare_header_stream(header: Headers) -> impl Stream<Item = core::result::Result<Frame<Bytes>, Infallible>> {
-  stream::iter([Ok(Frame::data(header.head)), Ok(Frame::data(header.tags))].into_iter())
+  stream::iter([Ok(Frame::data(header.head)), Ok(Frame::data(header.tags))])
 }
 
 
@@ -48,7 +48,6 @@ pub(super) async fn wait_for_ogg_headers(header: &Arc<RwLock<Option<Headers>>>) 
   }
 }
 
-/// 
 pub(super) fn stream_response(body: BoxBody<Bytes, Infallible>) -> HttpResponse {
   Response::builder()
   .status(StatusCode::OK)
