@@ -24,7 +24,7 @@ pub(crate) fn validate_port(port: u16) -> Result<u16, TauConfigError> {
 pub(crate) fn validate_endpoint(endpoint: &str) -> Result<String, TauConfigError> {
   if Regex::new(r"^/?[a-zA-Z0-9._]+$")
     .expect("regex could not be built")
-      .is_match(&endpoint) {
+      .is_match(endpoint) {
         return Ok(endpoint.to_string());
   } 
   Err(TauConfigError::InvalidEndpoint(endpoint.to_string()))
