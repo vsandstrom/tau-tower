@@ -20,10 +20,10 @@ const TIMEOUT: Duration = Duration::from_millis(50);
 /// Creates a WebSocket receiver listening to the sender of the ogg opus stream.
 /// Appending the ogg opus blocks to a producer/consumer object.
 pub async fn thread(
-    tx: broadcast::Sender<Bytes>,
-    src_addr: SocketAddr,
-    credentials: Credentials,
-    header: Arc<RwLock<Option<Headers>>>
+  tx: broadcast::Sender<Bytes>,
+  src_addr: SocketAddr,
+  credentials: Credentials,
+  header: Arc<RwLock<Option<Headers>>>
 ) -> anyhow::Result<()> {
   let server = match TcpListener::bind(src_addr).await {
     Ok(s) => s,
@@ -36,7 +36,8 @@ pub async fn thread(
     match server.accept().await {
       Ok((stream, addr)) => {
         match accept_hdr_async(stream, |req: &Request<()>, res: hyper::Response<()>|
-          validate_headers(req, res, &credentials)
+          // unbox large error
+          validate_headers(req, res, &credentials).map_err(|e| *e)
         ).await {
           Ok(mut ws_stream) => {
             receive_data(&mut ws_stream, header.clone(), tx.clone()).await;
@@ -57,30 +58,30 @@ pub async fn thread(
   anyhow::Ok(())
 }
 
-fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &Credentials) -> Result<Response<()>, Response<Option<String>>> {
-  let username = req.headers()
-    .get("username")
-    .and_then(|u| u.to_str().ok());
-
-  let password = req.headers()
-    .get("password")
-    .and_then(|pw| pw.to_str().ok());
-
-  if username.is_none() || password.is_none() {
-    return Err(
-      Response::builder()
+fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &Credentials) -> Result<Response<()>, Box<Response<Option<String>>>> {
+  let (Some(username), Some(password)) = (
+    req.headers().get("username").and_then(|u| u.to_str().ok()),
+    req.headers().get("password").and_then(|p| p.to_str().ok())
+  ) else {
+    return Err( 
+      match Response::builder()
         .status(StatusCode::UNAUTHORIZED)
-        .body(Some("Missing credentials".to_string()))
-        .unwrap()
+        .body(Some("Missing credentials".to_string())) {
+          Ok(res) => Box::new(res),
+          Err(e) => unreachable!("unable to build UNAUTHORIZED response: {e}")
+        }
+
     )
-  }
+  };
 
   if !credentials.validate(username, password) {
     return Err(
-      Response::builder()
+      match Response::builder()
         .status(StatusCode::FORBIDDEN)
-        .body(Some("Credentials do not match".to_string()))
-        .unwrap()
+        .body(Some("Credentials do not match".to_string())) {
+          Ok(res) => Box::new(res),
+          Err(e) => unreachable!("unable to build FORBIDDEN response: {e}")
+      }
     );
   }
 
@@ -100,7 +101,8 @@ async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Rw
       }
     };
 
-    if !headers_parsed { // short circuit if headers have already been parsed.
+    if !headers_parsed { 
+      // short circuit if headers have already been parsed.
       if let Ok(head) = validate_header(page.clone()) { 
         temp_headers.0 = Some(head); 
       } 
@@ -110,13 +112,14 @@ async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Rw
       
       if let (Some(head), Some(tags)) = &temp_headers 
         && let Ok(mut h) = header.try_write() 
-        && let None = *h {
+        && (*h).is_none() {
         *h = Some(Headers::new((head.clone(), tags.clone())));
         headers_parsed = true;
       }
     }
 
-    if let Err(e) = tx.send(page) && last_log.elapsed() > LOG_TIMEOUT {
+    if let Err(e) = tx.send(page) 
+      && last_log.elapsed() > LOG_TIMEOUT {
       eprintln!("could not open client stream: {e}"); 
       last_log = Instant::now();
     }

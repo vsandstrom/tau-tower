@@ -5,7 +5,7 @@ use crate::util::ip::{validate_port, parse_port, validate_endpoint};
 #[command(name = "tau-tower")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command( about = "Webradio server, distributes audio stream from a tau-radio client")]
-pub(crate) struct Args {
+pub struct Args {
     /// Webradio username
     #[arg(long)]
     pub username: Option<String>,
@@ -21,6 +21,9 @@ pub(crate) struct Args {
     /// Stream port
     #[arg(short='p', long, value_parser=|p: &str| { validate_port(parse_port(p).unwrap()) })]
     pub mount_port: Option<u16>,
+
+    #[arg(short='a', long, value_parser=|p: &str| { validate_port(parse_port(p).unwrap()) })]
+    pub asciinema_port: Option<u16>,
 
     #[arg(short, long, value_parser=|m: &str| { validate_endpoint(m) })]
     pub mount: Option<String>,

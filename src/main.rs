@@ -1,3 +1,13 @@
+#![warn(unused_imports)]
+#![warn(clippy::unwrap_used)]        // pushes you toward proper error handling
+#![warn(clippy::expect_used)]        // same — you have a few .expect() calls
+#![warn(clippy::panic)]              // no silent panics in async code
+#![warn(clippy::missing_errors_doc)] // keeps doc comments honest
+                                     
+#![deny(clippy::all)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::nursery)]
+
 mod server;
 mod threads;
 mod config;
@@ -21,7 +31,6 @@ use crate::args::Args;
 use crate::util::ip::filter_mount_endpoint;
 
 
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
   let args = Args::parse();
@@ -39,9 +48,10 @@ async fn main() -> anyhow::Result<()> {
    * Set the endpoint where the broadcast is served from this server
    * Validate endpoint - allow for either `endpoint` or `/endpoint` format
    */
-  let endpoint = filter_mount_endpoint(config.mount);
-  let mount: Arc<String> = Arc::from(endpoint.unwrap());
+  let endpoint = filter_mount_endpoint(&config.mount)?;
+  let mount: Arc<String> = Arc::from(endpoint);
   let mount_clone = mount.clone();
+
 
   /*
    * Headers container to store OggOpus headers from source broadcast, for rebroadcasting 
@@ -65,6 +75,15 @@ async fn main() -> anyhow::Result<()> {
   let listen_addr = SocketAddr::new(local_ip, config.listen_port);
   let server_addr = SocketAddr::new(local_ip, config.mount_port);
 
+
+  /*
+   * Sets the local asciinema server address and port from config, if there is any such config.
+   */
+  #[allow(clippy::option_map_or_none)]
+  let allowed_origin: Option<&'static str> = config.cors_port.map_or(None, |port| {
+      Some(Box::leak(Box::new(format!("http://localhost:{port}"))))
+  });
+
   /*
    * Receiving task, listens to remote stream over WebSocket
    */
@@ -85,7 +104,8 @@ async fn main() -> anyhow::Result<()> {
       server_addr,
       tx,
       headers,
-      mount_clone
+      mount_clone,
+      allowed_origin
     )
   );
 
