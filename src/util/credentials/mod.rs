@@ -5,14 +5,8 @@ pub struct Credentials {
 }
 
 impl Credentials {
-  pub fn validate(&self, username: Option<&str>, password: Option<&str>) -> bool {
-    if (username, password) == (
-      Some(&self.username),
-      Some(&self.password),
-      ) {
-      return true
-    }
-    false
+  pub fn validate(&self, username: &str, password: &str) -> bool {
+    username == self.username && password == self.password 
   }
 }
 
