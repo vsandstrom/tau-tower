@@ -28,7 +28,7 @@ use crate::util::credentials::Credentials;
 use crate::util::ui::server_started_info;
 use crate::config::Config;
 use crate::args::Args;
-use crate::util::ip::filter_mount_endpoint;
+use crate::util::ip::{filter_mount_endpoint};
 
 
 #[tokio::main]
@@ -77,12 +77,21 @@ async fn main() -> anyhow::Result<()> {
 
 
   /*
-   * Sets the local asciinema server address and port from config, if there is any such config.
+   * If Config contains a certain localhost port for CORS, the tautower server will restrict it to
+   * that port.
+   * Otherwise, it will be open for consumption by any and all listeners per default.
    */
-  #[allow(clippy::option_map_or_none)]
-  let allowed_origin: Option<&'static str> = config.cors_port.map_or(None, |port| {
-      Some(Box::leak(Box::new(format!("http://localhost:{port}"))))
-  });
+  // #[allow(clippy::option_map_or_none)]
+  // let allowed_origin: Option<&'static str> = config.cors_allow_list.map_or(
+  //   Some(Box::leak(Box::new("*"))) , 
+  //   |port| { Some(Box::leak(Box::new(format!("http://localhost:{port}"))))}
+  // );
+
+  let allowed_origin: Arc<Option<Vec<&str>>> = Arc::new(config.cors_allow_list.map(|origins| {
+    origins.into_iter()
+      .map(|s| Box::leak(s.into_boxed_str()) as &'static str)
+      .collect()
+  }));
 
   /*
    * Receiving task, listens to remote stream over WebSocket

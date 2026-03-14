@@ -1,6 +1,6 @@
 mod responses;
 
-use std::{net::Ipv4Addr, sync::Arc};
+use std::sync::Arc;
 use std::convert::Infallible;
 use tokio::sync::{RwLock, broadcast};
 use http_body_util::{BodyExt, combinators::BoxBody};
@@ -27,24 +27,35 @@ pub async fn handle_request(
   tx: broadcast::Sender<Bytes>,
   ogg_header: Arc<RwLock<Option<Headers>>>,
   mount: Arc<String>,
-  allowed_origin: Option<&str>,
+  allowed_origins: Arc<Option<Vec<&'static str>>>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>> {
-  let mut res = match (req.method(), req.uri().path()) {
-    (&Method::GET, path) if path == mount.as_ref() => 
-      stream_response(build_stream_body(&tx, ogg_header).await),
-
+  let res = match (req.method(), req.uri().path()) {
+    (&Method::GET, path) if path == mount.as_ref() => {
+      let mut res = stream_response(
+        build_stream_body(&tx, ogg_header).await
+      ); 
+      apply_cors(&req, &mut res, &allowed_origins.as_deref());
+      res
+    },
     (&Method::GET, "/" | "/index.html") => {
+      
       let html = format!(
-        "<html><body><a href=\"{}{mount}\">Audio Stream</a></body></html>",
-        std::net::IpAddr::V4(Ipv4Addr::LOCALHOST)
-      );
+        "\
+          <html>\
+          <body>\
+          <div>\
+          <p>localhost link to audio stream</p>\
+          <a href=\"{mount}\">Audio Stream</a>\
+          </div>\
+          </body>\
+          </html>\
+          ");
       let body = http_body_util::Full::new(Bytes::from(html)).boxed();
       default_response(body)
     },
 
-    (&Method::OPTIONS, _) => cors_preflight_response(allowed_origin),
+    (&Method::OPTIONS, _) => cors_preflight_response(&req, &allowed_origins.as_deref()),
     _ =>  four_oh_four()
   };
-  apply_cors(&req, &mut res, allowed_origin);
   Ok(res)
 }

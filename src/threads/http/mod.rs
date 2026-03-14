@@ -15,7 +15,7 @@ pub async fn thread(
   tx: broadcast::Sender<Bytes>,
   header: Arc<RwLock<Option<Headers>>>,
   mount: Arc<String>,
-  allowed_origin: Option<&'static str>,
+  allowed_origin: Arc<Option<Vec<&'static str>>>,
 ) -> anyhow::Result<()> {
   let listener = match TcpListener::bind(&ip_addr).await {
     Ok(tl) => tl,
@@ -43,9 +43,12 @@ pub async fn thread(
     let tx_inner_clone = tx_clone.clone();
     let header_clone = header.clone();
     let mount_clone = mount.clone();
+    let allowed_origin_clone = allowed_origin.clone();
+
     tokio::task::spawn(async move {
       if let Err(err) = http1::Builder::new()
         .serve_connection(io, service_fn(move |req| {
+        let allowed_origin= allowed_origin_clone.clone();
           handle_request(req, tx_inner_clone.clone(), header_clone.clone(),  mount_clone.clone(), allowed_origin)
       }))
         .await
