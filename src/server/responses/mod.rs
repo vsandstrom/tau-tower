@@ -87,19 +87,35 @@ pub(super) fn stream_response(body: BoxBody<Bytes, Infallible>) -> HttpResponse 
 
 }
 
-pub(super) fn cors_preflight_response(allowed_origin: Option<&str>) -> HttpResponse {
-  let Some(origin) = allowed_origin else {
-    return match Response::builder()
-      .status(StatusCode::FORBIDDEN)
-      .body(BoxBody::new(Empty::<Bytes>::new())) {
-        Ok(res) => res,
-        Err(e) => unreachable!("unable to build cors_preflight_response: {e}")
-      }
+pub(super) fn cors_preflight_response(
+  req: &Request<Incoming>,
+  allowed_origin: &Option<&[&'static str]>) -> HttpResponse {
+  let forbidden = || match Response::builder()
+    .status(StatusCode::FORBIDDEN)
+    .body(BoxBody::new(Empty::<Bytes>::new())) {
+      Ok(res) => res,
+      Err(e) => unreachable!("unable to build cors_preflight_response: {e}")
+    };
+
+  let Some(origins) = allowed_origin else {
+    return forbidden();
   };
 
-  match Response::builder()
+  let Some(request_origin) = req.headers().get(ORIGIN) else {
+    return forbidden();
+  };
+  
+  let allowed = match origins {
+    ["*"] => "*", 
+    _ => match origins.iter().find(|&&o| o.as_bytes() == request_origin.as_bytes()) {
+      Some(&o) => o,
+      None => return forbidden(),
+    }
+  };
+
+  match Response::builder() 
     .status(StatusCode::NO_CONTENT)
-    .header(ACCESS_CONTROL_ALLOW_ORIGIN, origin)
+    .header(ACCESS_CONTROL_ALLOW_ORIGIN, allowed)
     .header(ACCESS_CONTROL_ALLOW_METHODS,"GET, OPTIONS")
     .header(ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization")
     .header(ACCESS_CONTROL_EXPOSE_HEADERS,"Content-Type")
@@ -107,22 +123,27 @@ pub(super) fn cors_preflight_response(allowed_origin: Option<&str>) -> HttpRespo
     .body(BoxBody::new(Empty::<Bytes>::new())) {
       Ok(res) => res,
       Err(e) => unreachable!("unable to build cors_preflight_response: {e}")
-    }
+  }
 }
 
-pub(super) fn apply_cors(req: &Request<Incoming>, res: &mut HttpResponse, allowed_origin: Option<&str>) {
-  if let Some(allowed) = allowed_origin 
-    && let Some(origin) = req.headers().get(ORIGIN)
-    && origin.as_bytes() == allowed.as_bytes() {
-    res.headers_mut().insert(
-      ACCESS_CONTROL_ALLOW_ORIGIN,
-      origin.clone()
-    );
-    res.headers_mut().append(
-      VARY,
-      HeaderValue::from_static("Origin")
-    );
-  }
+pub(super) fn apply_cors(
+  req: &Request<Incoming>, 
+  res: &mut HttpResponse, 
+  allowed_origins: &Option<&[&'static str]>
+) {
+  let Some(origins) = allowed_origins else { return; };
+  let Some(request_origin) = req.headers().get(ORIGIN) else { return; };
+
+  let allowed = match origins {
+    ["*"] => "*", 
+    _ => match origins.iter().find(|&&o| o.as_bytes() == request_origin.as_bytes()) {
+      Some(&o) => o,
+      None => return
+    }
+  };
+
+  res.headers_mut().insert( ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(allowed));
+  res.headers_mut().append( VARY, HeaderValue::from_static("Origin"));
 }
 
 pub(super) fn default_response(body: BoxBody<Bytes, Infallible>) -> HttpResponse {

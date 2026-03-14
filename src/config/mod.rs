@@ -2,7 +2,9 @@ use dialoguer::{Input, Password};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 use inline_colorization::{color_reset, color_bright_red, color_bright_yellow};
-use crate::util::ip::{validate_ip, validate_port, validate_endpoint};
+use crate::util::ip::{validate_ip, validate_port, validate_endpoint, ORIGIN_RE};
+
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -11,7 +13,7 @@ pub struct Config {
     pub ip: String,
     pub listen_port: u16,
     pub mount_port: u16,
-    pub cors_port: Option<u16>,
+    pub cors_allow_list: Option<Vec<String>>,
     pub mount: String,
 }
 
@@ -31,6 +33,9 @@ pub enum TauConfigError {
 
     #[error("invalid port number: {0}")]
     InvalidPort(String),
+
+    #[error("invalid cors allow_list url: {0}")]
+    InvalidCorsUrl(String),
 
     #[error("invalid endpoint formatting: {0}")]
     InvalidEndpoint(String),
@@ -69,8 +74,8 @@ impl Config {
     if let Some(endpoint) = &args.mount {
       self.mount.clone_from(endpoint);
     }
-    if args.asciinema_port.is_some() {
-      self.cors_port = args.asciinema_port;
+    if args.cors_allow_list.is_some() {
+      self.cors_allow_list.clone_from(&args.cors_allow_list);
     }
     self
   }
@@ -133,20 +138,31 @@ impl Config {
         .map_err(|e| TauConfigError::InvalidEndpoint(e.to_string()))
         .and_then(|x| validate_endpoint(x.as_ref()))?;
 
-      let asciinema_port: String = Input::new()
-        .with_prompt(format!("{color_bright_yellow}Optional Asciinema Server port{color_reset}"))
+      let cors_port: String = Input::new()
+        .with_prompt(format!("{color_bright_yellow}Optional CORS allow list URLs{color_reset}"))
         .allow_empty(true)
         .interact_text()
-        .map_err(|e| TauConfigError::InvalidPort(e.to_string()))?;
+        .map_err(|e| TauConfigError::InvalidCorsUrl(e.to_string()))?;
 
-      let asciinema_port = if asciinema_port.is_empty() {
-        None
-      } else if let Ok(port) = asciinema_port.parse::<u16>() 
-        && validate_port(port).is_ok() {
-        Some(port)
+        
+      let cors_allow_list = if cors_port.is_empty() {
+        None 
       } else {
-        None
+        let origins: Result<Vec<String>, &str> = cors_port.split_whitespace()
+          .map(|s| if ORIGIN_RE.is_match(s) { 
+            Ok(s.to_string()) 
+          } else {
+            Err(s)
+          })
+          .collect();
+
+        match origins {
+          Ok(urls) => Some(urls),
+          Err(e) => return Err(TauConfigError::InvalidCorsUrl(e.to_string()))
+        }
       };
+
+
 
       let config = Self {
         username,
@@ -154,7 +170,7 @@ impl Config {
         ip,
         listen_port,
         mount_port,
-        cors_port: asciinema_port,
+        cors_allow_list,
         mount,
       };
 
