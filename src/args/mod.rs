@@ -1,5 +1,5 @@
 use clap::Parser;
-use crate::util::ip::{validate_port, parse_port, validate_endpoint};
+use crate::util::ip::{parse_origin, parse_port, validate_endpoint, validate_port};
 
 #[derive(Parser)]
 #[command(name = "tau-tower")]
@@ -22,8 +22,8 @@ pub struct Args {
     #[arg(short='p', long, value_parser=|p: &str| { validate_port(parse_port(p).unwrap()) })]
     pub mount_port: Option<u16>,
 
-    #[arg(short='a', long, value_parser=|p: &str| { validate_port(parse_port(p).unwrap()) })]
-    pub asciinema_port: Option<u16>,
+    #[arg(short='a', long, value_parser=|s: &str| { parse_origin(s) })]
+    pub cors_allow_list: Option<Vec<String>>,
 
     #[arg(short, long, value_parser=|m: &str| { validate_endpoint(m) })]
     pub mount: Option<String>,
