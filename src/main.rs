@@ -15,11 +15,10 @@ mod args;
 mod util;
 
 use std::net::{Ipv4Addr, SocketAddr};
-use anyhow::{Context, Ok};
+use anyhow::Ok;
 use tokio::sync::{RwLock, broadcast};
 use tokio::task;
 use std::sync::Arc;
-use std::str::FromStr;
 use hyper::body::Bytes;
 use clap::Parser;
 
@@ -68,15 +67,14 @@ async fn main() -> anyhow::Result<()> {
   let tx_clone = tx.clone();
 
   // remote source address: 
-  let ip = Ipv4Addr::from_str(&config.ip).context("Invalid IP in config")?;
+  // let ip = Ipv4Addr::from_str(&config.ip).context("Invalid IP in config")?;
 
   // local listening and broadcasting addresses:
   let local_ip = std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED);
   let listen_addr = SocketAddr::new(local_ip, config.listen_port);
   let server_addr = SocketAddr::new(local_ip, config.mount_port);
 
-
-  /*
+/*
    * If Config contains a certain localhost port for CORS, the tautower server will restrict it to
    * that port.
    * Otherwise, it will be open for consumption by any and all listeners per default.
@@ -118,7 +116,7 @@ async fn main() -> anyhow::Result<()> {
     )
   );
 
-  server_started_info(ip, config.mount_port, &mount);
+  server_started_info(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST), config.mount_port, &mount);
 
   /*
    * Server will shut down if ctrl_c or error in either task is throwed. 
