@@ -3,11 +3,13 @@ use crate::config::TauConfigError;
 use is_ip::is_ip;
 use regex_lite::Regex;
 
+#[allow(clippy::expect_used)]
 pub static ORIGIN_RE: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"^https?://[^\s/$.?#].[^\s]*$|\*")
     .expect("regex is malformed and could not be built")
 });
 
+#[allow(clippy::expect_used)]
 static ENDPOINT_RE: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"^/?[a-zA-Z0-9._]+$")
     .expect("regex is malformed and could not be built")

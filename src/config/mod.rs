@@ -2,7 +2,7 @@ use dialoguer::{Input, Password};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 use inline_colorization::{color_reset, color_bright_red, color_bright_yellow};
-use crate::util::ip::{validate_ip, validate_port, validate_endpoint, ORIGIN_RE};
+use crate::util::ip::{validate_port, validate_endpoint, ORIGIN_RE};
 
 
 
@@ -10,7 +10,7 @@ use crate::util::ip::{validate_ip, validate_port, validate_endpoint, ORIGIN_RE};
 pub struct Config {
     pub username: String,
     pub password: String,
-    pub ip: String,
+    // pub ip: String,
     pub listen_port: u16,
     pub mount_port: u16,
     pub cors_allow_list: Option<Vec<String>>,
@@ -110,12 +110,12 @@ impl Config {
         .interact()
         .map_err(|e| TauConfigError::Input(e.to_string()))?;
 
-      let ip: String = Input::new()
-        .with_prompt(format!("{color_bright_yellow}Public IP for server{color_reset}"))
-        .default("127.0.0.1".to_string())
-        .interact_text()
-        .map_err(|e| TauConfigError::InvalidIp(e.to_string()))
-        .and_then(validate_ip)?;
+      // let ip: String = Input::new()
+      //   .with_prompt(format!("{color_bright_yellow}Public IP for server{color_reset}"))
+      //   .default("127.0.0.1".to_string())
+      //   .interact_text()
+      //   .map_err(|e| TauConfigError::InvalidIp(e.to_string()))
+      //   .and_then(validate_ip)?;
 
       let listen_port: u16 = Input::new()
         .with_prompt(format!("{color_bright_yellow}Source port{color_reset}"))
@@ -167,7 +167,7 @@ impl Config {
       let config = Self {
         username,
         password,
-        ip,
+        // ip,
         listen_port,
         mount_port,
         cors_allow_list,
