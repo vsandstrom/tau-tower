@@ -24,8 +24,8 @@ use crate::util::ogg_headers::Headers;
 type HttpResponse = Response<BoxBody<Bytes, Infallible>>;
 
 
-/// Builds the HTTP audio stream from Tokio BroadcastStream.
-/// It waits for the headers of the OggOpus stream to be available and takes care of prepending
+/// Builds the HTTP audio stream from Tokio `BroadcastStream`.
+/// It waits for the headers of the Ogg Opus stream to be available and takes care of prepending
 /// them to each new consumer stream. 
 pub(super) async fn build_stream_body(
   tx: &broadcast::Sender<Bytes>, 
@@ -89,7 +89,7 @@ pub(super) fn stream_response(body: BoxBody<Bytes, Infallible>) -> HttpResponse 
 
 pub(super) fn cors_preflight_response(
   req: &Request<Incoming>,
-  allowed_origin: &Option<&[&'static str]>) -> HttpResponse {
+  allowed_origin: Option<&[&'static str]>) -> HttpResponse {
   let forbidden = || match Response::builder()
     .status(StatusCode::FORBIDDEN)
     .body(BoxBody::new(Empty::<Bytes>::new())) {
@@ -129,7 +129,7 @@ pub(super) fn cors_preflight_response(
 pub(super) fn apply_cors(
   req: &Request<Incoming>, 
   res: &mut HttpResponse, 
-  allowed_origins: &Option<&[&'static str]>
+  allowed_origins: Option<&[&'static str]>
 ) {
   let Some(origins) = allowed_origins else { return; };
   let Some(request_origin) = req.headers().get(ORIGIN) else { return; };

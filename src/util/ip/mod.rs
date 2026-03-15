@@ -1,24 +1,18 @@
 use std::sync::LazyLock;
 use crate::config::TauConfigError;
-use is_ip::is_ip;
 use regex_lite::Regex;
 
+#[allow(clippy::expect_used)]
 pub static ORIGIN_RE: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"^https?://[^\s/$.?#].[^\s]*$|\*")
     .expect("regex is malformed and could not be built")
 });
 
+#[allow(clippy::expect_used)]
 static ENDPOINT_RE: LazyLock<Regex> = LazyLock::new(|| {
   Regex::new(r"^/?[a-zA-Z0-9._]+$")
     .expect("regex is malformed and could not be built")
 });
-
-pub fn validate_ip(ip: String) -> Result<String, TauConfigError> {
-  if !is_ip(&ip) {
-    return Err(TauConfigError::InvalidIp(ip));
-  }
-  Ok(ip)
-}
 
 pub fn parse_port(p: &str) -> Result<u16, TauConfigError> {
   p.parse::<u16>()
@@ -47,7 +41,6 @@ pub fn validate_endpoint(endpoint: &str) -> Result<String, TauConfigError> {
   } 
   Err(TauConfigError::InvalidEndpoint(endpoint.to_string()))
 }
-
 
 pub fn filter_mount_endpoint(endpoint: &str) -> anyhow::Result<String> {
   if let Ok(endpoint) = validate_endpoint(endpoint) {
