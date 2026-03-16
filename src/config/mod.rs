@@ -10,7 +10,6 @@ use crate::util::ip::{validate_port, validate_endpoint, ORIGIN_RE};
 pub struct Config {
     pub username: String,
     pub password: String,
-    // pub ip: String,
     pub listen_port: u16,
     pub mount_port: u16,
     pub cors_allow_list: Option<Vec<String>>,
@@ -27,9 +26,6 @@ pub enum TauConfigError {
     
     #[error("toml writing error: {0}")]
     TomlWrite(#[from] toml::ser::Error),
-
-    #[error("invalid IP: {0}")]
-    InvalidIp(String),
 
     #[error("invalid port number: {0}")]
     InvalidPort(String),
@@ -110,13 +106,6 @@ impl Config {
         .interact()
         .map_err(|e| TauConfigError::Input(e.to_string()))?;
 
-      // let ip: String = Input::new()
-      //   .with_prompt(format!("{color_bright_yellow}Public IP for server{color_reset}"))
-      //   .default("127.0.0.1".to_string())
-      //   .interact_text()
-      //   .map_err(|e| TauConfigError::InvalidIp(e.to_string()))
-      //   .and_then(validate_ip)?;
-
       let listen_port: u16 = Input::new()
         .with_prompt(format!("{color_bright_yellow}Source port{color_reset}"))
         .default(8000)
@@ -167,7 +156,6 @@ impl Config {
       let config = Self {
         username,
         password,
-        // ip,
         listen_port,
         mount_port,
         cors_allow_list,
