@@ -1,9 +1,8 @@
 name: Compiles on macOS (Intel / Silicon), Ubuntu and NixOS
 
 on:
-  push
-#  pull_request:
-#    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 env:
   CARGO_TERM_COLOR: always
