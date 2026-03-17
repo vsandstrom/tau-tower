@@ -34,7 +34,7 @@ pub async fn handle_request(
       let mut res = stream_response(
         build_stream_body(&tx, ogg_header).await
       ); 
-      apply_cors(&req, &mut res, &allowed_origins.as_deref());
+      apply_cors(&req, &mut res, allowed_origins.as_deref());
       res
     },
     (&Method::GET, "/" | "/index.html") => {
@@ -54,7 +54,7 @@ pub async fn handle_request(
       default_response(body)
     },
 
-    (&Method::OPTIONS, _) => cors_preflight_response(&req, &allowed_origins.as_deref()),
+    (&Method::OPTIONS, _) => cors_preflight_response(&req, allowed_origins.as_deref()),
     _ =>  four_oh_four()
   };
   Ok(res)

@@ -58,6 +58,7 @@ pub async fn thread(
   anyhow::Ok(())
 }
 
+#[allow(clippy::result_large_err)]
 fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &Credentials) -> Result<Response<()>, Box<Response<Option<String>>>> {
   let (Some(username), Some(password)) = (
     req.headers().get("username").and_then(|u| u.to_str().ok()),
@@ -70,7 +71,6 @@ fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &C
           Ok(res) => Box::new(res),
           Err(e) => unreachable!("unable to build UNAUTHORIZED response: {e}")
         }
-
     )
   };
 
