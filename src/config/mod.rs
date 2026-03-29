@@ -11,9 +11,9 @@ pub struct Config {
     pub username: String,
     pub password: String,
     pub listen_port: u16,
-    pub mount_port: u16,
+    pub broadcast_port: u16,
     pub cors_allow_list: Option<Vec<String>>,
-    pub mount: String,
+    pub broadcast_endpoint: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -64,11 +64,11 @@ impl Config {
     if let Some(listen_port) = args.listen_port {
       self.listen_port = listen_port;
     }
-    if let Some(mount_port) = args.mount_port {
-      self.mount_port = mount_port;
+    if let Some(broadcast_port) = args.broadcast_port {
+      self.broadcast_port = broadcast_port;
     }
-    if let Some(endpoint) = &args.mount {
-      self.mount.clone_from(endpoint);
+    if let Some(endpoint) = &args.broadcast_endpoint {
+      self.broadcast_endpoint.clone_from(endpoint);
     }
     if args.cors_allow_list.is_some() {
       self.cors_allow_list.clone_from(&args.cors_allow_list);
@@ -113,14 +113,14 @@ impl Config {
         .map_err(|e| TauConfigError::InvalidPort(e.to_string()))
         .and_then(validate_port)?;
       
-      let mount_port: u16 = Input::new()
+      let broadcast_port: u16 = Input::new()
         .with_prompt(format!("{color_bright_yellow}Broadcast port{color_reset}"))
         .default(8001)
         .interact_text()
         .map_err(|e| TauConfigError::InvalidPort(e.to_string()))
         .and_then(validate_port)?;
 
-      let mount = Input::new()
+      let broadcast_endpoint = Input::new()
         .with_prompt(format!("{color_bright_yellow}Mount endpoint{color_reset}"))
         .default("tau.ogg".to_string())
         .interact_text()
@@ -157,9 +157,9 @@ impl Config {
         username,
         password,
         listen_port,
-        mount_port,
+        broadcast_port,
         cors_allow_list,
-        mount,
+        broadcast_endpoint,
       };
 
       if let Some(parent) = path.parent() {
