@@ -1,5 +1,10 @@
 [![Compiles on macOS (Intel / Silicon), Ubuntu and NixOS](https://github.com/tau-org/tau-tower/actions/workflows/rust.yml/badge.svg?event=pull_request)](https://github.com/tau-org/tau-tower/actions/workflows/rust.yml)
 
+This project is funded through [NGI Zero Core](https://nlnet.nl/core), a fund established by [NLnet](https://nlnet.nl) with financial support from the European Commission's [Next Generation Internet](https://ngi.eu) program. Learn more at the [NLnet project page](https://nlnet.nl/project/Tau).
+
+[<img src="https://nlnet.nl/logo/banner.png" alt="NLnet foundation logo" width="20%" />](https://nlnet.nl)
+[<img src="https://nlnet.nl/image/logos/NGI0_tag.svg" alt="NGI Zero Logo" width="20%" />](https://nlnet.nl/core)
+
 ## Usage:
 This tool is built for livestreaming audio to the world wide web, broadcasting 
 a audio stream from an instance of 
@@ -39,10 +44,10 @@ password = "emanresu"
 listen_port = 8000      
 
 # Sets the broadcast port, from which the stream will be accessable
-mount_port = 8001       
+broadcast-port = 8001       
 
 # Sets the server http endpoint - http://localhost:8001/tau.ogg
-mount = "tau,ogg"       
+broadcast-endpoint = "tau.ogg"       
 
 # Optional: 
 # Sets which other sites are able to rebroadcast the stream
@@ -58,7 +63,7 @@ If you want to temporarily overwrite the config, you are able to pass arguments.
 # Ex: Uses temporary credentials, and disables the local recording. 
 $ tau-tower \
   --listen-port <listen-port> \
-  --mount-port <mount-port> \
+  --broadcast-port <broadcast-port> \
   --cors-allow-list "*"
 ```
 
@@ -69,3 +74,38 @@ $ tau-tower \
 $ sudo apt update
 $ sudo apt install build-essential
 ```
+
+### Streaming Pipeline
+
+[`tau-radio`](https://github.com/tau-org/tau-radio) runs on your local
+machine, and captures sound from the audio device on your system. The defaults
+are `BlackHole 2ch` on macOS, and `pipewire` on Linux, though these can be
+overwritten by the config or in the CLI arguments.
+
+The captured audio is then streamed to the
+[`tau-tower`](https://github.com/tau-org/tau-tower), which should run on a
+remote server. This server application exposes a audio media stream that can be
+consumed by many clients, as a web radio. 
+
+Alongside `tau-tower` should run an instance of [`Asciinema`](https://github.com/asciinema/asciinema) 
+which can use the live audio stream as background to a live terminal stream, by
+setting the broadcast endpoint URL as a media source in the streams settings.
+
+```
+https://example.com:8002/tau.ogg
+```
+ 
+For this to work, the Asciinema origin must be added to `cors_allow_list` in `tower.toml`:
+ 
+```toml
+cors_allow_list = ["https://example.com:4000"]
+```
+```
+
+```
+[your computer]                        [remote server]
+  tau-radio  ──── internet ──▶  Caddy  ──▶  tau-tower  ──▶  Asciinema
+(audio capture)                (proxy)     (broadcaster)    (stream host)
+```
+
+> For TLS termination and reverse proxy setup, see [Proxy Setup (Caddy)](docs/proxy-setup.md).
