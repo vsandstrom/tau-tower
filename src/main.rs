@@ -47,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
    * Set the endpoint where the broadcast is served from this server
    * Validate endpoint - allow for either `endpoint` or `/endpoint` format
    */
-  let endpoint = filter_mount_endpoint(&config.mount)?;
+  let endpoint = filter_mount_endpoint(&config.broadcast_endpoint)?;
   let mount: Arc<String> = Arc::from(endpoint);
   let mount_clone = mount.clone();
 
@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
   // local listening and broadcasting addresses:
   let local_ip = std::net::IpAddr::V4(Ipv4Addr::UNSPECIFIED);
   let listen_addr = SocketAddr::new(local_ip, config.listen_port);
-  let server_addr = SocketAddr::new(local_ip, config.mount_port);
+  let server_addr = SocketAddr::new(local_ip, config.broadcast_port);
 
 /*
    * If Config contains a certain localhost port for CORS, the tautower server will restrict it to
@@ -116,7 +116,7 @@ async fn main() -> anyhow::Result<()> {
     )
   );
 
-  server_started_info(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST), config.mount_port, &mount);
+  server_started_info(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST), config.broadcast_port, &mount);
 
   /*
    * Server will shut down if ctrl_c or error in either task is throwed. 
