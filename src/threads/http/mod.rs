@@ -20,8 +20,6 @@ pub async fn thread(
   let listener = match TcpListener::bind(&ip_addr).await {
     Ok(tl) => tl,
     Err(e) => {
-      eprintln!("Could not create TcpListener: {e}");
-      eprintln!("{ip_addr:#?}");
       anyhow::bail!("Could not create TcpListener: {e} {ip_addr:#?}");
     }
   };

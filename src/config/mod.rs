@@ -97,38 +97,38 @@ impl Config {
       );
       println!("{color_bright_yellow}Credentials must correspond to the source stream config{color_reset}\n");
       let username: String = Input::new()
-        .with_prompt(format!("{color_bright_yellow}Username{color_reset}"))
+        .with_prompt(prompt("Username"))
         .interact_text()
         .map_err(|e| TauConfigError::Input(e.to_string()))?;
 
       let password: String = Password::new()
-        .with_prompt(format!("{color_bright_yellow}Password{color_reset}"))
+        .with_prompt(prompt("Password"))
         .interact()
         .map_err(|e| TauConfigError::Input(e.to_string()))?;
 
       let listen_port: u16 = Input::new()
-        .with_prompt(format!("{color_bright_yellow}Source port{color_reset}"))
+        .with_prompt(prompt("Source port"))
         .default(8000)
         .interact_text()
         .map_err(|e| TauConfigError::InvalidPort(e.to_string()))
         .and_then(validate_port)?;
       
       let broadcast_port: u16 = Input::new()
-        .with_prompt(format!("{color_bright_yellow}Broadcast port{color_reset}"))
+        .with_prompt(prompt("Broadcast port"))
         .default(8001)
         .interact_text()
         .map_err(|e| TauConfigError::InvalidPort(e.to_string()))
         .and_then(validate_port)?;
 
       let broadcast_endpoint = Input::new()
-        .with_prompt(format!("{color_bright_yellow}Mount endpoint{color_reset}"))
+        .with_prompt(prompt("Mount endpoint"))
         .default("tau.ogg".to_string())
         .interact_text()
         .map_err(|e| TauConfigError::InvalidEndpoint(e.to_string()))
         .and_then(|x| validate_endpoint(x.as_ref()))?;
 
       let cors_port: String = Input::new()
-        .with_prompt(format!("{color_bright_yellow}Optional CORS allow list URLs{color_reset}"))
+        .with_prompt(prompt("Optional CORS allow list URLs"))
         .allow_empty(true)
         .interact_text()
         .map_err(|e| TauConfigError::InvalidCorsUrl(e.to_string()))?;
@@ -137,7 +137,8 @@ impl Config {
       let cors_allow_list = if cors_port.is_empty() {
         None 
       } else {
-        let origins: Result<Vec<String>, &str> = cors_port.split_whitespace()
+        let origins: Result<Vec<String>, &str> = cors_port
+          .split_whitespace()
           .map(|s| if ORIGIN_RE.is_match(s) { 
             Ok(s.to_string()) 
           } else {
@@ -150,8 +151,6 @@ impl Config {
           Err(e) => return Err(TauConfigError::InvalidCorsUrl(e.to_string()))
         }
       };
-
-
 
       let config = Self {
         username,
@@ -178,4 +177,8 @@ impl Config {
       }
     }
   }
+}
+
+fn prompt(msg: &str) -> String {
+  format!("{color_bright_yellow}{msg}{color_reset}")
 }
