@@ -121,6 +121,9 @@ async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Rw
     if let Err(e) = tx.send(page) 
       && last_log.elapsed() > LOG_TIMEOUT {
       eprintln!("could not open client stream: {e}"); 
+      // Flushing headers if connection is lost
+      temp_headers = (None, None);
+      headers_parsed = false;
       last_log = Instant::now();
     }
   }

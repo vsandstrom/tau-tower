@@ -1,36 +1,62 @@
 
-## To use Tau-Tower on a remote server - accompanying Asciinema
+## To use Tau-Tower on a remote server
 
 ----
 
 ### Setting up Tau with Caddy
 
-We use `Caddy` to reverse proxy the broadcast stream. The radio broadcast will
-be located at `https://example.com/tau.ogg`.
+
+We use `Caddy` to funnel the source client stream to the broadcast software
+[tau-tower](https://github.com/tau-org/tau-tower). 
+
+[How to install Caddy on your system](https://caddyserver.com/docs/install)
 
 Make sure that your VPS or remote server has the correct ports open to receive
-and broadcast the radio stream. __You should wisely restrict which IP can send
-to the receive port__, most likely from the VPS settings. 
+and broadcast the radio stream. 
 
+#### TLS __enabled__ source stream
 ``` Caddyfile
+# incoming audio source stream
+example.com:8001 {
+    reverse_proxy :6000
+}
+
+# outgoing audio broadcast stream
 example.com {
     reverse_proxy :6001
 }
+```
 
-asciinema.example.com {
-    reverse_proxy :4000
-}
+---
 
+The above Caddyfile assumes that `tau-radio` has enabled __tls/ssl encryption__, but for if for
+some reason you would like to broadcast with __tls/ssl__ disabled, you can
+configure Caddy like below:
+
+If doing this, __it would be wise to restrict your server to only receive from your public IP 
+when sending to the upstream port__. 
+
+#### TLS __disabled__ source stream
+```Caddyfile
+# incoming INSECURE audio source stream
+# use the IP address of the upstream server instead of domain name
 :8001 {
     reverse_proxy :6000
 }
+
+# outgoing audio broadcast stream
+example.com {
+    reverse_proxy :6001
+}
 ```
 
-Below is an updated config file for `tau-tower` which uses the ports set up
-in the `Caddyfile` above. 
+---
+
+## TOML configs
+
+Below is an updated config file for `tau-tower` which uses the ports from `Caddyfile` example [above](#tls-enabled-source-stream). 
 
 ``` tower.toml
-# username and password are NOT secure.
 username = "username" 
 password = "emanresu" 
 
@@ -46,88 +72,27 @@ broadcast-endpoint = "tau.ogg"
 cors_allow_list = ["https://asciinema.example.com"]
 ```
 
-In the `tau-radio` client config, we keep our previous config, assuming the
-remote server will receive on the port we have set. 
+In the `tau-radio` client config, we set `tls = true` enabling a __tls/ssl-encrypted__ 
+stream to the remote server on the port we have set. Caddy will handle the decryption if 
+configured as the TLS enabled Caddyfile example
+[above](#tls-enabled-source-stream).
+
 ``` config.toml
 username = "username"
 password = "emanresu"
 
-# IP to the remote server
-ip = 111.222.33.44
+# URL to the remote server ( use IP address if tls = false )
+url = "example.com"
 
-# The port which Caddy has exposed for us
-transmit-port = 8001
+# The remote server port where we send the stream
+upstream_port = 8001
 
 # Default audio interface on macOS
 audio_interface = "BlackHole 2ch"
 
-broadcast-endpoint = "tau.ogg"
+# On linux
+# audio_interface = "pipewire"
+
+# broadcast behind tls/ssl encryption ( recommended )
+tls = true
 ```
-
-----
-
-### Asciinema setup
-
-Below is a copy from the [`Getting started`](https://docs.asciinema.org/getting-started/#self-hosting-the-server)-section from the Asciinema Documentation. 
-
-----
-
-While asciinema.org is the default asciinema server used by the CLI for uploading recordings, you can self-host your own instance if you want full ownership and control over the recordings.
-
-asciinema server is packaged as OCI container image and is available at ghcr.io/asciinema/asciinema-server.
-
-Here's a minimal docker-compose example:
-
-```yml
-services:
-  asciinema:
-    image: ghcr.io/asciinema/asciinema-server:latest
-    ports:
-      - '4000:4000'
-    volumes:
-      - asciinema_data:/var/lib/asciinema
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  postgres:
-    image: docker.io/library/postgres:14
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_HOST_AUTH_METHOD=trust
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
-      interval: 2s
-      timeout: 5s
-      retries: 10
-
-volumes:
-  asciinema_data:
-  postgres_data:
-```
-
-----
-
-Start it with:
-
-```bash
-docker compose up
-```
-
-Then point asciinema CLI to it by setting ASCIINEMA_API_URL environment variable:
-(Set env variable properly if the intended use is a public-facing asciinema server. 
-Follow the full guide on https://docs.asciinema.org).
-
-```
-# export ASCIINEMA_API_URL=https://asciinema.example.com
-
-# localhost example
-export ASCIINEMA_API_URL=http://localhost:4000
-
-asciinema rec demo.cast
-asciinema upload demo.cast
-```
-
-Note that the above configuration should be used only for testing the server locally. See full [`server self-hosting`](https://docs.asciinema.org/manual/server/self-hosting/) guide to learn how to set it up properly in a full-featured and secure way.
-

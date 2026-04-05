@@ -3,20 +3,19 @@ use futures_util::StreamExt;
 use http_body_util::StreamBody;
 use std::convert::Infallible;
 use hyper::{ 
-  StatusCode,
-  Request,
-  Response,
-  body::{Bytes, Frame, Incoming}, 
-  header::{
-    ACCESS_CONTROL_ALLOW_HEADERS,
+  Request, Response, StatusCode, body::{Bytes, Frame, Incoming}, header::{
+    ACCESS_CONTROL_ALLOW_HEADERS, 
     ACCESS_CONTROL_ALLOW_METHODS,
     ACCESS_CONTROL_ALLOW_ORIGIN,
     ACCESS_CONTROL_EXPOSE_HEADERS,
     ACCESS_CONTROL_MAX_AGE,
+    X_CONTENT_TYPE_OPTIONS,
     CACHE_CONTROL,
     CONTENT_TYPE,
-    ORIGIN, VARY,
-    HeaderValue,
+    CONNECTION,
+    ORIGIN,
+    VARY,
+    HeaderValue, 
   }
 };
 use tokio::sync::{RwLock, broadcast};
@@ -86,13 +85,14 @@ pub(super) async fn wait_for_ogg_headers(header: &Arc<RwLock<Option<Headers>>>) 
 pub(super) fn stream_response(body: BoxBody<Bytes, Infallible>) -> HttpResponse {
   match Response::builder()
   .status(StatusCode::OK)
-  .header(CONTENT_TYPE, "audio/ogg; codecs=\"opus\"")
+  .header(CONTENT_TYPE, "audio/ogg")
   .header(CACHE_CONTROL, "no-cache")
+  .header(CONNECTION, "keep-alive")
+  .header(X_CONTENT_TYPE_OPTIONS, "nosniff")
   .body(body) {
     Ok(res) => res,
     Err(e) => unreachable!("Could not build a stream_response: {e}")
   }
-
 }
 
 pub(super) fn cors_preflight_response(
