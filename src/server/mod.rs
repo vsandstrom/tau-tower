@@ -12,6 +12,8 @@ use hyper::{
   body::{Bytes, Incoming}, 
 };
 
+use hyper::header::USER_AGENT;
+
 use crate::util::ogg_headers::Headers;
 use responses::{
   build_stream_body,
@@ -31,6 +33,14 @@ pub async fn handle_request(
 ) -> Result<Response<BoxBody<Bytes, Infallible>>> {
   let res = match (req.method(), req.uri().path()) {
     (&Method::GET, path) if path == mount.as_ref() => {
+      // println!("{:?}", req.body());
+      println!("{:?}", req.headers().keys());
+      req.headers()
+        .iter()
+        .find(|(name, _)| *name == USER_AGENT )
+        .map(|(_, value)| {
+        println!("{value:?}");
+      });
       let mut res = stream_response(
         build_stream_body(&tx, ogg_header).await
       ); 
