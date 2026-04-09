@@ -27,9 +27,13 @@ $ cargo install --git https://github.com/tau-org/tau-tower
 ```
 
 The first time using the tool, it will search your system for a config file. 
-It looks for it in the directory:
+It looks for it in the path 
 ```bash
-$ $HOME/.config/tau/tower.toml
+$HOME/.config/tau/tower.toml # on macOS
+```
+or 
+```bash
+$XDG_CONFIG_HOME/tau/tower.toml # on Linux
 ```
 
 If there is no config file located there, you will be prompted to create one. 
