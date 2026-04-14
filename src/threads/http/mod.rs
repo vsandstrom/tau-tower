@@ -6,55 +6,60 @@ use hyper::server::conn::http1;
 use std::sync::Arc;
 use hyper::body::Bytes;
 use crate::server::handle_request;
-use crate::util::ogg_headers::Headers;
+use crate::util::ogg_headers::OggHeaders;
 
 use super::TIMEOUT;
 
 pub async fn thread(
-  ip_addr: impl tokio::net::ToSocketAddrs + std::fmt::Debug + Send + Sync,
+  server_addr: impl tokio::net::ToSocketAddrs + std::fmt::Debug + Send + Sync,
   tx: broadcast::Sender<Bytes>,
-  header: Arc<RwLock<Option<Headers>>>,
-  mount: Arc<String>,
-  allowed_origin: Arc<Option<Vec<&'static str>>>,
+  header: Arc<RwLock<Option<OggHeaders>>>,
+  mount: &'static str,
+  allowed_origins: Arc<Option<Vec<&'static str>>>,
+  mut shutdown_rx: tokio::sync::watch::Receiver<bool>
 ) -> anyhow::Result<()> {
-  let listener = match TcpListener::bind(&ip_addr).await {
+  let listener = match TcpListener::bind(&server_addr).await {
     Ok(tl) => tl,
     Err(e) => {
-      anyhow::bail!("Could not create TcpListener: {e} {ip_addr:#?}");
+      anyhow::bail!("Could not create TcpListener: {e} {server_addr:#?}");
     }
   };
-  let tx_clone = tx.clone();
-  let mount = mount.clone();
 
-  loop {
-    let (stream, _peer) = match listener.accept().await {
-      Ok(sp) => sp,
-      Err(e) => {
+  'broadcaster: loop {
+    tokio::select! {
+      _ = shutdown_rx.changed() => { break 'broadcaster }
+      Ok((stream, _peer)) = listener.accept() => {
+        let _ = stream.set_nodelay(true);
+        let io = TokioIo::new(stream);
+
+        tokio::task::spawn({
+            let tx = tx.clone();
+            let ogg_headers = header.clone();
+            let allowed_origins = allowed_origins.clone();
+            async move {
+              if let Err(err) = http1::Builder::new()
+                .serve_connection(io, service_fn(
+                move |req| {
+                  handle_request(
+                    req,
+                    tx.clone(),
+                    ogg_headers.clone(),
+                    mount,
+                    allowed_origins.clone()
+                  )
+                })
+              ).await {
+                eprintln!("error serving connection: {err}");
+              }
+            }
+          });
+      }
+      Err(e) = listener.accept() => {
         eprintln!("Accept error: {e}");
         tokio::time::sleep(TIMEOUT).await; // avoid busy loop
-        continue;
       }
-    };
-
-    let _ = stream.set_nodelay(true);
-    let io = TokioIo::new(stream);
-    let tx_inner_clone = tx_clone.clone();
-    let header_clone = header.clone();
-    let mount_clone = mount.clone();
-    let allowed_origin_clone = allowed_origin.clone();
-
-    tokio::task::spawn(async move {
-      if let Err(err) = http1::Builder::new()
-        .serve_connection(io, service_fn(move |req| {
-        let allowed_origin= allowed_origin_clone.clone();
-          handle_request(req, tx_inner_clone.clone(), header_clone.clone(),  mount_clone.clone(), allowed_origin)
-      }))
-        .await
-      {
-        eprintln!("error serving connection: {err}");
-      }
-    });
+    }
   }
-  #[allow(unreachable_code)]
+
   anyhow::Ok(())
 }
