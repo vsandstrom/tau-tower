@@ -12,9 +12,7 @@ use hyper::{
   body::{Bytes, Incoming}, 
 };
 
-use hyper::header::USER_AGENT;
-
-use crate::util::ogg_headers::Headers;
+use crate::util::ogg_headers::OggHeaders;
 use responses::{
   build_stream_body,
   default_response,
@@ -27,28 +25,19 @@ use responses::{
 pub async fn handle_request(
   req: Request<Incoming>,
   tx: broadcast::Sender<Bytes>,
-  ogg_header: Arc<RwLock<Option<Headers>>>,
-  mount: Arc<String>,
+  ogg_headers: Arc<RwLock<Option<OggHeaders>>>,
+  mount: &'static str,
   allowed_origins: Arc<Option<Vec<&'static str>>>,
 ) -> Result<Response<BoxBody<Bytes, Infallible>>> {
   let res = match (req.method(), req.uri().path()) {
-    (&Method::GET, path) if path == mount.as_ref() => {
-      // println!("{:?}", req.body());
-      println!("{:?}", req.headers().keys());
-      req.headers()
-        .iter()
-        .find(|(name, _)| *name == USER_AGENT )
-        .map(|(_, value)| {
-        println!("{value:?}");
-      });
+    (&Method::GET, path) if path == mount => {
       let mut res = stream_response(
-        build_stream_body(&tx, ogg_header).await
+        build_stream_body(&tx, ogg_headers).await
       ); 
       apply_cors(&req, &mut res, allowed_origins.as_deref());
       res
     },
     (&Method::GET, "/" | "/index.html") => {
-      
       let html = format!(
         "\
           <html>\
@@ -63,7 +52,6 @@ pub async fn handle_request(
       let body = http_body_util::Full::new(Bytes::from(html)).boxed();
       default_response(body)
     },
-
     (&Method::OPTIONS, _) => cors_preflight_response(&req, allowed_origins.as_deref()),
     _ =>  four_oh_four()
   };

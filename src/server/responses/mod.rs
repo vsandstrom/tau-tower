@@ -26,7 +26,7 @@ use http_body_util::{
   Full,
   combinators::BoxBody
 };
-use crate::util::ogg_headers::Headers;
+use crate::util::ogg_headers::OggHeaders;
 
 type HttpResponse = Response<BoxBody<Bytes, Infallible>>;
 
@@ -36,7 +36,7 @@ type HttpResponse = Response<BoxBody<Bytes, Infallible>>;
 /// them to each new consumer stream. 
 pub(super) async fn build_stream_body(
   tx: &broadcast::Sender<Bytes>, 
-  ogg_header: Arc<RwLock<Option<Headers>>>) 
+  ogg_header: Arc<RwLock<Option<OggHeaders>>>) 
 -> BoxBody<Bytes, Infallible> {
   let rx = tx.subscribe();
   let stream = tokio_stream::wrappers::BroadcastStream::new(rx)
@@ -66,14 +66,14 @@ pub(super) async fn build_stream_body(
 
 /// Prepares the Ogg Opus headers, captured from the source stream, to be broadcast on every new
 /// listener connection.
-pub(super) fn prepare_header_stream(header: Headers) -> impl Stream<Item = core::result::Result<Frame<Bytes>, Infallible>> {
+pub(super) fn prepare_header_stream(header: OggHeaders) -> impl Stream<Item = core::result::Result<Frame<Bytes>, Infallible>> {
   stream::iter([Ok(Frame::data(header.head)), Ok(Frame::data(header.tags))])
 }
 
 
 /// Prevent listeners receiving broken streams, when [`Headers`] struct has not been populated by
 /// source stream
-pub(super) async fn wait_for_ogg_headers(header: &Arc<RwLock<Option<Headers>>>) -> Headers {
+pub(super) async fn wait_for_ogg_headers(header: &Arc<RwLock<Option<OggHeaders>>>) -> OggHeaders {
   loop {
     if let Some(h) = header.read().await.as_ref() {
       return h.clone()

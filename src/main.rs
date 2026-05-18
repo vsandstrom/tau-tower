@@ -1,8 +1,8 @@
 #![warn(unused_imports)]
-#![warn(clippy::unwrap_used)]        // pushes you toward proper error handling
-#![warn(clippy::expect_used)]        // same — you have a few .expect() calls
-#![warn(clippy::panic)]              // no silent panics in async code
-#![warn(clippy::missing_errors_doc)] // keeps doc comments honest
+#![warn(clippy::unwrap_used)]
+#![warn(clippy::expect_used)]
+#![warn(clippy::panic)]
+#![warn(clippy::missing_errors_doc)]
                                      
 #![deny(clippy::all)]
 #![warn(clippy::pedantic)]
@@ -36,36 +36,33 @@ async fn main() -> anyhow::Result<()> {
   let config = Config::load_or_create(args.reset_config)
     .map(|c| c.merge_cli_args(&args))?;
 
-
-  let creds = Credentials{
+  let credentials = Credentials{
     username: config.username.clone(), 
     password: config.password.clone(),
   };
 
-  
   /* 
    * Set the endpoint where the broadcast is served from this server
    * Validate endpoint - allow for either `endpoint` or `/endpoint` format
    */
-  let endpoint = filter_mount_endpoint(&config.broadcast_endpoint)?;
-  let mount: Arc<String> = Arc::from(endpoint);
-  let mount_clone = mount.clone();
-
+  let mount: &'static str = filter_mount_endpoint(&config.broadcast_endpoint)
+    .map(|endpoint| {
+      Box::leak(Box::new(endpoint.into_boxed_str()))
+  })?;
 
   /*
    * Headers container to store OggOpus headers from source broadcast, for rebroadcasting 
    * when a listener connects to this servers stream.
    */
-  let headers = Arc::new(RwLock::new(None)); 
-  let headers_clone = headers.clone();
+  let header = Arc::new(RwLock::new(None)); 
 
   /* 
    * Single producer - multiple identical streams. Used to capture the audio signal from the 
    * broadcasting source to each listener of this server. 
    * */ 
   let (tx, _) = broadcast::channel::<Bytes>(1024);
-  let tx_clone = tx.clone();
 
+  let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
   // remote source address: 
   // let ip = Ipv4Addr::from_str(&config.ip).context("Invalid IP in config")?;
 
@@ -77,56 +74,61 @@ async fn main() -> anyhow::Result<()> {
 /*
    * If Config contains a certain localhost port for CORS, the tautower server will restrict it to
    * that port.
-   * Otherwise, it will be open for consumption by any and all listeners per default.
    */
-  // #[allow(clippy::option_map_or_none)]
-  // let allowed_origin: Option<&'static str> = config.cors_allow_list.map_or(
-  //   Some(Box::leak(Box::new("*"))) , 
-  //   |port| { Some(Box::leak(Box::new(format!("http://localhost:{port}"))))}
-  // );
 
-  let allowed_origin: Arc<Option<Vec<&str>>> = Arc::new(config.cors_allow_list.map(|origins| {
-    origins.into_iter()
-      .map(|s| Box::leak(s.into_boxed_str()) as &'static str)
-      .collect()
-  }));
-
-  /*
-   * Receiving task, listens to remote stream over WebSocket
-   */
-  let listener_task = task::spawn( 
-    ws::thread(
-      tx_clone,
-      listen_addr,
-      creds,
-      headers_clone
-    )
+  let allowed_origins: Arc<Option<Vec<&str>>> = Arc::new(
+    config.cors_allow_list.map(|origins| {
+      origins .into_iter()
+        .map(|s| 
+          Box::leak(s.into_boxed_str()) as &'static str
+        )
+      .collect() 
+    })
   );
 
-  /*
-   * Broadcasting task, broadcasts to all listeners over an http media stream
-   */
-  let server_task = task::spawn(
+  /* Receiving task, listens to remote stream over WebSocket */
+  let listener_task = task::spawn({
+    let shutdown_rx = shutdown_rx.clone();
+    let tx = tx.clone(); 
+    let header = header.clone();
+    ws::thread(
+      tx,
+      listen_addr,
+      credentials,
+      header,
+      shutdown_rx
+    )
+  });
+
+  /* Broadcasting task, broadcasts to all listeners over an http media stream */
+  let server_task = task::spawn({
     http::thread(
       server_addr,
       tx,
-      headers,
-      mount_clone,
-      allowed_origin
+      header,
+      mount,
+      allowed_origins,
+      shutdown_rx
     )
-  );
+  });
 
-  server_started_info(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST), config.broadcast_port, &mount);
+  server_started_info(
+    std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),
+    config.broadcast_port,
+    mount
+  );
 
   /*
    * Server will shut down if ctrl_c or error in either task is throwed. 
    * The tasks will loop indefinitely if they are able to bind to their respective TCP port.
    */
+
   tokio::select! {
-    res = listener_task => { res?? },
-    res = server_task => {res??},
+    res = listener_task => { res??; },
+    res = server_task   => { res??; },
     _ = tokio::signal::ctrl_c() => {
-        println!("Shutdown signal received");
+      shutdown_tx.send_replace(true);
+      println!("\n\rShutdown signal received");
     }
   }
   Ok(())
