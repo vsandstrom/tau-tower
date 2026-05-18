@@ -13,7 +13,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::time::Instant;
 use crate::threads::LOG_TIMEOUT;
 use crate::util::credentials::Credentials;
-use crate::util::ogg_headers::{Headers, validate_tags, validate_header};
+use crate::util::ogg_headers::{OggHeaderType, OggHeaders, parse_ogg_headers};
 
 const TIMEOUT: Duration = Duration::from_millis(50);
 
@@ -21,23 +21,27 @@ const TIMEOUT: Duration = Duration::from_millis(50);
 /// Appending the ogg opus blocks to a producer/consumer object.
 pub async fn thread(
   tx: broadcast::Sender<Bytes>,
-  src_addr: SocketAddr,
+  listen_addr: SocketAddr,
   credentials: Credentials,
-  header: Arc<RwLock<Option<Headers>>>
+  header: Arc<RwLock<Option<OggHeaders>>>,
+  mut shutdown_rx: tokio::sync::watch::Receiver<bool>
 ) -> anyhow::Result<()> {
-  let server = match TcpListener::bind(src_addr).await {
+  let server = match TcpListener::bind(listen_addr).await {
     Ok(s) => s,
     Err(e) => {
       anyhow::bail!("Could not bind to source address: {e}");
     }
   };
 
-  loop {
-    match server.accept().await {
-      Ok((stream, addr)) => {
-        match accept_hdr_async(stream, |req: &Request<()>, res: hyper::Response<()>|
+  'listener: loop {
+    tokio::select! {
+      _ = shutdown_rx.changed() => { break 'listener } 
+      Ok((stream, addr)) = server.accept() => {
+        match accept_hdr_async(stream, |req: &Request<_>, res: hyper::Response<()>| {
+
           // unbox large error
-          validate_headers(req, res, &credentials).map_err(|e| *e)
+          validate_headers(req, res, &credentials)
+        }
         ).await {
           Ok(mut ws_stream) => {
             receive_data(&mut ws_stream, header.clone(), tx.clone()).await;
@@ -46,49 +50,39 @@ pub async fn thread(
             eprintln!("Handshake failed from {addr}: {e}");
           }
         }
-      },
-      Err(e) => {
+      }
+      Err(e) = server.accept() => {
         eprintln!("{e}");
         tokio::time::sleep(TIMEOUT).await;
       }
     }
   }
 
-  #[allow(unreachable_code)]
   anyhow::Ok(())
 }
 
+
 #[allow(clippy::result_large_err)]
-fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &Credentials) -> Result<Response<()>, Box<Response<Option<String>>>> {
+fn validate_headers(req: &Request<()>, res: hyper::Response<()>, credentials: &Credentials) -> Result<Response<()>, Response<Option<String>>> {
   let (Some(username), Some(password)) = (
     req.headers().get("username").and_then(|u| u.to_str().ok()),
     req.headers().get("password").and_then(|p| p.to_str().ok())
   ) else {
-    return Err( 
-      match Response::builder()
-        .status(StatusCode::UNAUTHORIZED)
-        .body(Some("Missing credentials".to_string())) {
-          Ok(res) => Box::new(res),
-          Err(e) => unreachable!("unable to build UNAUTHORIZED response: {e}")
-        }
-    )
+    let mut res = Response::new(Some("Unauthorized access: 401".to_string()));
+    *res.status_mut() = StatusCode::UNAUTHORIZED;
+    return Err(res);
   };
 
   if !credentials.validate(username, password) {
-    return Err(
-      match Response::builder()
-        .status(StatusCode::FORBIDDEN)
-        .body(Some("Credentials do not match".to_string())) {
-          Ok(res) => Box::new(res),
-          Err(e) => unreachable!("unable to build FORBIDDEN response: {e}")
-      }
-    );
+    let mut res = Response::new(Some("Access forbidden: 403".to_string()));
+    *res.status_mut() = StatusCode::FORBIDDEN;
+    return Err(res);
   }
 
   Ok(res)
 }
 
-async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<RwLock<Option<Headers>>>, tx: broadcast::Sender<Bytes>) {
+async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<RwLock<Option<OggHeaders>>>, tx: broadcast::Sender<Bytes>) {
   let mut temp_headers: (Option<Bytes>, Option<Bytes>) = (None, None);
   let mut headers_parsed = false;
   let mut last_log = Instant::now();
@@ -101,19 +95,18 @@ async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Rw
       }
     };
 
+    // short circuit if headers have already been parsed.
     if !headers_parsed { 
-      // short circuit if headers have already been parsed.
-      if let Ok(head) = validate_header(page.clone()) { 
-        temp_headers.0 = Some(head); 
-      } 
-      if let Ok(tags) = validate_tags(page.clone()) { 
-        temp_headers.1 = Some(tags); 
-      } 
+      match parse_ogg_headers(&page) {
+        OggHeaderType::Head(head) => {temp_headers.0 = Some(head);},
+        OggHeaderType::Tags(tags) => {temp_headers.1 = Some(tags);},
+        OggHeaderType::None => {}
+      }
       
       if let (Some(head), Some(tags)) = &temp_headers 
         && let Ok(mut h) = header.try_write() 
         && (*h).is_none() {
-        *h = Some(Headers::new((head.clone(), tags.clone())));
+        *h = Some(OggHeaders::new((head.clone(), tags.clone())));
         headers_parsed = true;
       }
     }
@@ -128,5 +121,3 @@ async fn receive_data(ws_stream: &mut WebSocketStream<TcpStream>, header: Arc<Rw
     }
   }
 }
-
-
