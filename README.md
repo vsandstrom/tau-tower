@@ -104,12 +104,13 @@ For this to work, the Asciinema origin must be added to `cors_allow_list` in `to
 ```toml
 cors_allow_list = ["https://example.com:4000"]
 ```
-```
 
-```
-[your computer]                        [remote server]
-  tau-radio  ──── internet ──▶  Caddy  ──▶  tau-tower  ──▶  Asciinema
-(audio capture)                (proxy)     (broadcaster)    (stream host)
-```
+| your computer |  | remote server |  |  |
+| - | - | - | - | - |
+| (audio capture) | (opt. tls/ssl) | (proxy) | (broadcaster) | (opt. stream host) |
+| tau-radio -> | internet -> | Caddy  -> | tau-tower  -> | Asciinema |
+
+
 
 > For TLS termination and reverse proxy setup, see [Proxy Setup (Caddy)](docs/proxy-setup.md).
+
