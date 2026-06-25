@@ -34,6 +34,7 @@ use crate::util::ip::{filter_mount_endpoint};
 async fn main() -> anyhow::Result<()> {
   let args = Args::parse();
   let config = Config::load_or_create(args.reset_config)
+    .map(Config::merge_env)
     .map(|c| c.merge_cli_args(&args))?;
 
   let credentials = Credentials{
