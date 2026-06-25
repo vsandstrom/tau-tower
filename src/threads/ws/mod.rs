@@ -33,27 +33,29 @@ pub async fn thread(
     }
   };
 
-  'listener: loop {
+  loop {
     tokio::select! {
-      _ = shutdown_rx.changed() => { break 'listener } 
-      Ok((stream, addr)) = server.accept() => {
-        match accept_hdr_async(stream, |req: &Request<_>, res: hyper::Response<()>| {
-
-          // unbox large error
-          validate_headers(req, res, &credentials)
+      _ = shutdown_rx.changed() => break,
+      conn = server.accept() => match conn {
+        Err(e) => {
+          eprintln!("{e}");
+          tokio::time::sleep(TIMEOUT).await;
         }
-        ).await {
-          Ok(mut ws_stream) => {
-            receive_data(&mut ws_stream, header.clone(), tx.clone()).await;
-          },
-          Err(e) => {
-            eprintln!("Handshake failed from {addr}: {e}");
+        Ok((stream, addr)) => {
+          match accept_hdr_async(stream, |req: &Request<_>, res: hyper::Response<()>| {
+            // unbox large error
+            validate_headers(req, res, &credentials)
+          })
+          .await
+          {
+            Ok(mut ws_stream) => {
+              receive_data(&mut ws_stream, header.clone(), tx.clone()).await;
+            }
+            Err(e) => {
+              eprintln!("Handshake failed from {addr}: {e}");
+            }
           }
         }
-      }
-      Err(e) = server.accept() => {
-        eprintln!("{e}");
-        tokio::time::sleep(TIMEOUT).await;
       }
     }
   }

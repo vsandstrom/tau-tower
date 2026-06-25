@@ -25,38 +25,37 @@ pub async fn thread(
     }
   };
 
-  'broadcaster: loop {
+  loop {
     tokio::select! {
-      _ = shutdown_rx.changed() => { break 'broadcaster }
-      Ok((stream, _peer)) = listener.accept() => {
-        let _ = stream.set_nodelay(true);
-        let io = TokioIo::new(stream);
+      _ = shutdown_rx.changed() => break,
+      conn = listener.accept() => match conn {
+        Err(e) => {
+          eprintln!("Accept error: {e}");
+          tokio::time::sleep(TIMEOUT).await; // avoid busy loop
+        }
+        Ok((stream, _peer)) => {
+          let _ = stream.set_nodelay(true);
+          let io = TokioIo::new(stream);
 
-        tokio::task::spawn({
+          tokio::task::spawn({
             let tx = tx.clone();
             let ogg_headers = header.clone();
             let allowed_origins = allowed_origins.clone();
             async move {
               if let Err(err) = http1::Builder::new()
-                .serve_connection(io, service_fn(
-                move |req| {
-                  handle_request(
-                    req,
-                    tx.clone(),
-                    ogg_headers.clone(),
-                    mount,
-                    allowed_origins.clone()
-                  )
-                })
-              ).await {
+                .serve_connection(
+                  io,
+                  service_fn(move |req| {
+                    handle_request(req, tx.clone(), ogg_headers.clone(), mount, allowed_origins.clone())
+                  }),
+                )
+                .await
+              {
                 eprintln!("error serving connection: {err}");
               }
             }
           });
-      }
-      Err(e) = listener.accept() => {
-        eprintln!("Accept error: {e}");
-        tokio::time::sleep(TIMEOUT).await; // avoid busy loop
+        }
       }
     }
   }
