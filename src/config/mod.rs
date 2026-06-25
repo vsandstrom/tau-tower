@@ -76,6 +76,19 @@ impl Config {
     self
   }
 
+  /// Overlays the source credentials from the environment
+  /// (`TAU_TOWER_USERNAME` / `TAU_TOWER_PASSWORD`) on top of the loaded config.
+  /// This lets the secrets be injected at runtime instead of being written into `tower.toml`.
+  pub fn merge_env(mut self) -> Self {
+    if let Some(username) = env_nonempty("TAU_TOWER_USERNAME") {
+      self.username = username;
+    }
+    if let Some(password) = env_nonempty("TAU_TOWER_PASSWORD") {
+      self.password = password;
+    }
+    self
+  }
+
   fn load_config(path: &PathBuf) -> Result<Self, TauConfigError> {
     let settings = fs::read_to_string(path)?; //.expect("could not read config file");
     match toml::from_str(&settings) {
@@ -177,6 +190,11 @@ impl Config {
       }
     }
   }
+}
+
+/// Reads an environment variable, returning `None` when it is unset or empty.
+fn env_nonempty(key: &str) -> Option<String> {
+  std::env::var(key).ok().filter(|value| !value.is_empty())
 }
 
 fn prompt(msg: &str) -> String {
